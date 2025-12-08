@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FlashCRM</string>
+    <string name="title_activity_main">FlashCRM</string>
+    <string name="package_name">com.tomas.flashcrm</string>
+    <string name="custom_url_scheme">com.tomas.flashcrm</string>
+</resources>

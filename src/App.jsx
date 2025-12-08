@@ -1,0 +1,470 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Plus, Search, Layout, Database, ArrowRight, Upload, User, CheckCircle, Target, Trash2, Settings
+} from 'lucide-react';
+import { STATUS_OPTIONS, PAYMENT_STATUS, parseCSVLine, calculateCompositeScore } from './utils/helpers';
+import { Notification } from './components/ui/Notification';
+import { LeadList } from './components/lead/LeadList';
+import { LeadDetail } from './components/lead/LeadDetail';
+import { LeadForm } from './components/lead/LeadForm';
+import { TrackingDashboard } from './components/tracking/TrackingDashboard';
+import { DataSettings } from './components/settings/DataSettings';
+import { ConfirmModal } from './components/ui/ConfirmModal';
+
+export default function App() {
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notification, setNotification] = useState(null);
+
+  // UI State
+  const [activeTab, setActiveTab] = useState('list');
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('todos');
+  const [isFabOpen, setIsFabOpen] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [skippedLeadIds, setSkippedLeadIds] = useState([]);
+
+  // Delete Modal State
+  const [leadToDelete, setLeadToDelete] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const [formData, setFormData] = useState({
+    name: '', company: '', phone: '', email: '',
+    status: 'lead', paymentStatus: 'na', serviceDetails: '',
+    value: '', website: '', full_address: '', place_link: '',
+    fitnessScore: 50, webScore: 0, gbpScore: 0, sercotecScore: 0
+  });
+
+  const fileInputRef = useRef(null);
+
+  // --- LOCAL STORAGE ---
+  useEffect(() => {
+    const loadLeads = () => {
+      const storedLeads = localStorage.getItem('flashcrm_leads');
+      if (storedLeads) {
+        try {
+          const parsed = JSON.parse(storedLeads);
+          setLeads(parsed);
+        } catch (e) { console.error("Error loading local data", e); }
+      }
+      setLoading(false);
+    };
+    loadLeads();
+  }, []);
+
+  const saveLeadsToStorage = (newLeads) => {
+    setLeads(newLeads);
+    localStorage.setItem('flashcrm_leads', JSON.stringify(newLeads));
+  };
+
+  const showToast = (msg) => setNotification(msg);
+
+  // --- ACTIONS ---
+  const handleQuickUpdate = (field, value) => {
+    if (!selectedLead) return;
+
+    const updatedLead = { ...selectedLead, [field]: value, updatedAt: Date.now() };
+    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+
+    saveLeadsToStorage(updatedLeads);
+    setSelectedLead(updatedLead);
+    showToast("Estado actualizado");
+  };
+
+  // Helper for List View Actions
+  const handleQuickUpdateByObj = (lead, field, value) => {
+    const updatedLead = { ...lead, [field]: value, updatedAt: Date.now() };
+    const updatedLeads = leads.map(l => l.id === lead.id ? updatedLead : l);
+    saveLeadsToStorage(updatedLeads);
+    showToast("Estado actualizado");
+  };
+
+  const handleDeleteByObj = (lead) => {
+    setLeadToDelete(lead);
+  };
+
+  const confirmDelete = () => {
+    if (!leadToDelete) return;
+
+    // SOFT DELETE Logic
+    const updatedLeads = leads.map(l =>
+      l.id === leadToDelete.id
+        ? { ...l, deletedAt: Date.now() }
+        : l
+    );
+
+    saveLeadsToStorage(updatedLeads);
+
+    if (selectedLead && selectedLead.id === leadToDelete.id) {
+      setSelectedLead(null);
+      setActiveTab('list');
+    }
+
+    setLeadToDelete(null);
+    showToast("Lead movido a papelera 🗑️");
+  };
+
+  // --- CSV IMPORT ---
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setImporting(true);
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const lines = text.split('\n');
+
+      const newLeads = [];
+      let count = 0;
+      let skippedInvalid = 0;
+
+      // Smart Header Detection
+      let startIndex = 0;
+      const firstLine = lines[0] ? lines[0].trim().toLowerCase() : '';
+      if (firstLine.includes('business_id') || firstLine.includes('phone') || firstLine.includes('name')) {
+        startIndex = 1;
+      }
+
+      for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = parseCSVLine(line);
+        if (cols.length < 3) continue;
+
+        // Strict Phone Validation (+569...)
+        let phone = cols[1] || '';
+        const cleanPhone = phone.replace(/[^0-9+]/g, '');
+
+        // Flexible check: must contain +569 or 569 and be roughly correct length
+        // e.g. +56 9 1234 5678 (12 digits), 56912345678 (11 digits)
+        const isValidPhone = /^(?:\+?56)?9\d{8}$/.test(cleanPhone);
+
+        if (!isValidPhone) {
+          skippedInvalid++;
+          continue;
+        }
+
+        const rawData = {
+          business_id: cols[0], phone_number: cleanPhone, name: cols[2], full_address: cols[3],
+          review_count: cols[6], rating: cols[7], website: cols[9], place_link: cols[11],
+          is_claimed: cols[14], verified: cols[15],
+        };
+
+        const scores = calculateCompositeScore(rawData);
+
+        newLeads.push({
+          id: 'lead_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          name: rawData.name || 'Sin Nombre',
+          phone: rawData.phone_number || '',
+          company: rawData.name,
+          email: '',
+          full_address: rawData.full_address || '',
+          website: rawData.website || '',
+          place_link: rawData.place_link || '',
+          status: 'lead',
+          paymentStatus: 'na',
+          fitnessScore: scores.generalScore,
+          webScore: scores.webScore,
+          gbpScore: scores.gbpScore,
+          sercotecScore: scores.sercotecScore,
+          source: 'import_csv',
+          notes: [],
+          searchStr: (rawData.name + ' ' + rawData.full_address).toLowerCase(),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        });
+        count++;
+      }
+
+      const mergedLeads = [...newLeads, ...leads];
+      saveLeadsToStorage(mergedLeads);
+      showToast(`¡${count} detectados! (${skippedInvalid} omitidos por mal número)`);
+
+      setImporting(false);
+      setShowImport(false);
+      setIsFabOpen(false);
+    };
+
+    reader.readAsText(file);
+  };
+
+  const handleNextBestLead = () => {
+    const isDetailView = activeTab === 'detail';
+    const currentId = isDetailView ? selectedLead?.id : null;
+
+    // If we are currently viewing a lead, add it to 'skipped' so we don't immediately return to it
+    if (currentId) {
+      setSkippedLeadIds(prev => [...prev, currentId]);
+    }
+
+    const pendingLeads = leads
+      .filter(l => !l.deletedAt && l.status === 'lead' && l.id !== currentId && !skippedLeadIds.includes(l.id))
+      .sort((a, b) => (b.fitnessScore || 0) - (a.fitnessScore || 0));
+
+    if (pendingLeads.length > 0) {
+      // If we are just skipping, the "next best" is the first one in the filtered list
+      openDetail(pendingLeads[0]);
+      setIsFabOpen(false);
+    } else {
+      // Logic Reset: If no more pending leads found *excluding skipped*, maybe verify if there are ANY pending leads?
+      // If truly none, show toast. If only skipped ones remain, maybe reset skipped?
+      const allPending = leads.filter(l => l.status === 'lead' && l.id !== currentId);
+      if (allPending.length > 0 && pendingLeads.length === 0) {
+        showToast("Has revisado todos los candidatos. Reiniciando ciclo...");
+        setSkippedLeadIds([]);
+        openDetail(allPending[0]); // Start over
+      } else {
+        showToast("¡Buen trabajo! No hay más leads pendientes.");
+      }
+      setIsFabOpen(false);
+    }
+  };
+
+  const handleSave = () => {
+    if (!formData.name) return showToast("Falta el nombre");
+
+    const payload = {
+      ...formData,
+      updatedAt: Date.now(),
+      searchStr: (formData.name + ' ' + formData.company).toLowerCase()
+    };
+
+    if (selectedLead) {
+      const updatedLeads = leads.map(l => l.id === selectedLead.id ? { ...l, ...payload } : l);
+      saveLeadsToStorage(updatedLeads);
+      setSelectedLead({ ...selectedLead, ...payload });
+      showToast("Guardado");
+    } else {
+      const newLead = {
+        id: 'lead_' + Date.now(),
+        ...payload,
+        fitnessScore: 50, webScore: 50, gbpScore: 50, sercotecScore: 50,
+        createdAt: Date.now(),
+        notes: []
+      };
+      saveLeadsToStorage([newLead, ...leads]);
+      showToast("Creado");
+    }
+    setActiveTab('list');
+    resetForm();
+  };
+
+  const handleClearAll = () => {
+    setShowClearConfirm(true);
+    setIsFabOpen(false);
+  };
+
+  const confirmClearAll = () => {
+    // Auto-Backup before nuke
+    localStorage.setItem('flashcrm_backup_last', JSON.stringify(leads));
+
+    setLeads([]);
+    localStorage.removeItem('flashcrm_leads');
+    showToast("Base de datos vaciada (Backup guardado)");
+    setShowClearConfirm(false);
+  };
+
+  const handleDelete = () => {
+    if (selectedLead) setLeadToDelete(selectedLead);
+  };
+
+  const handleAddNote = (noteContent) => {
+    if (!selectedLead) return;
+    const newNote = { content: noteContent, timestamp: Date.now(), id: Math.random().toString(36).substr(2, 9) };
+    const updatedNotes = [newNote, ...(selectedLead.notes || [])];
+
+    const updatedLead = { ...selectedLead, notes: updatedNotes, updatedAt: Date.now() };
+    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+
+    saveLeadsToStorage(updatedLeads);
+    setSelectedLead(updatedLead);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '', company: '', phone: '', email: '', status: 'lead', paymentStatus: 'na',
+      serviceDetails: '', value: '', website: '', full_address: '', place_link: '',
+      fitnessScore: 50, webScore: 0, gbpScore: 0, sercotecScore: 0
+    });
+    setSelectedLead(null);
+  };
+
+  const openNew = () => { resetForm(); setActiveTab('form'); setIsFabOpen(false); };
+  const openDetail = (lead) => { setSelectedLead(lead); setFormData(lead); setActiveTab('detail'); };
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter(l => {
+      if (l.deletedAt) return false; // Exclude soft-deleted leads
+
+      const matchesSearch = (l.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.company || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFilter = filterStatus === 'todos' || l.status === filterStatus;
+      return matchesSearch && matchesFilter;
+    });
+  }, [leads, searchTerm, filterStatus]);
+
+  const stats = useMemo(() => {
+    const total = leads.length;
+    const newLeads = leads.filter(l => l.status === 'lead').length;
+    const following = leads.filter(l => l.status === 'contactado').length;
+    const meeting = leads.filter(l => l.status === 'reunion').length;
+    const negotiating = leads.filter(l => l.status === 'negociacion').length;
+    const closed = leads.filter(l => l.status === 'cerrado').length;
+    const pendingPayment = leads.filter(l => ['pendiente', 'parcial'].includes(l.paymentStatus)).length;
+    const highFit = leads.filter(l => l.status === 'lead' && (l.fitnessScore || 0) > 75).length;
+    return { total, newLeads, following, meeting, negotiating, closed, pendingPayment, highFit };
+  }, [leads]);
+
+  if (loading) return <div className="flex h-screen items-center justify-center bg-gray-50 text-gray-500">Cargando...</div>;
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-50 text-gray-900 font-sans max-w-md mx-auto shadow-2xl overflow-hidden relative select-none">
+      {notification && <Notification message={notification} onClose={() => setNotification(null)} />}
+      <ConfirmModal
+        isOpen={!!leadToDelete}
+        onClose={() => setLeadToDelete(null)}
+        onConfirm={confirmDelete}
+        message={`¿Estás seguro de eliminar a ${leadToDelete?.name}?`}
+      />
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={confirmClearAll}
+        title="⚠️ ZONA DE PELIGRO"
+        message="¿Estás seguro de ELIMINAR TODOS los leads? Esta acción no se puede deshacer y perderás toda la información."
+      />
+
+      <header className="bg-white px-4 py-3 shadow-sm z-10 flex-none">
+        <div className="flex justify-between items-center mb-2">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-2">
+            Flash CRM <span className="text-xs bg-gray-100 text-gray-500 px-1 rounded">v2.0</span>
+          </h1>
+          <div className="flex gap-2">
+            <button
+              className={`p-2 rounded-full ${activeTab === 'tracking' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}
+              onClick={() => setActiveTab('tracking')}
+            >
+              <Target size={18} />
+            </button>
+            <button className={`p-2 rounded-full ${activeTab === 'list' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`} onClick={() => setActiveTab('list')}>
+              <Layout size={18} />
+            </button>
+            <button className={`p-2 rounded-full ${activeTab === 'settings' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`} onClick={() => setActiveTab('settings')}>
+              <Settings size={18} />
+            </button>
+          </div>
+        </div>
+        {activeTab === 'list' && (
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Buscar cliente..."
+                className="w-full bg-gray-100 pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <button onClick={() => setFilterStatus('todos')} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterStatus === 'todos' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-200 text-gray-600'}`}>Todos</button>
+              {STATUS_OPTIONS.map(opt => (
+                <button key={opt.id} onClick={() => setFilterStatus(opt.id)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterStatus === opt.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-200 text-gray-600'}`}>{opt.label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+      </header>
+
+      <main className="flex-1 overflow-y-auto pb-20 relative">
+        {activeTab === 'list' && (
+          <LeadList
+            stats={stats}
+            filteredLeads={filteredLeads}
+            openDetail={openDetail}
+            setFilterStatus={setFilterStatus}
+            statusOptions={STATUS_OPTIONS}
+            paymentStatusOptions={PAYMENT_STATUS}
+            onQuickUpdate={handleQuickUpdateByObj}
+            onDelete={handleDeleteByObj}
+          />
+        )}
+
+        {activeTab === 'tracking' && (
+          <TrackingDashboard
+            leads={leads}
+            openDetail={openDetail}
+            setActiveTab={setActiveTab}
+          />
+        )}
+
+        {activeTab === 'settings' && (
+          <DataSettings
+            leads={leads}
+            setLeads={setLeads}
+            saveLeads={saveLeadsToStorage}
+            showToast={showToast}
+          />
+        )}
+
+        {activeTab === 'detail' && selectedLead && (
+          <LeadDetail
+            lead={selectedLead}
+            setActiveTab={setActiveTab}
+            statusOptions={STATUS_OPTIONS}
+            paymentStatusOptions={PAYMENT_STATUS}
+            onUpdate={handleQuickUpdate}
+            onAddNote={handleAddNote}
+            onDelete={handleDelete}
+          />
+        )}
+
+        {activeTab === 'form' && (
+          <LeadForm
+            formData={formData}
+            setFormData={setFormData}
+            onSave={handleSave}
+            onCancel={() => selectedLead ? setActiveTab('detail') : setActiveTab('list')}
+            onDelete={handleDelete}
+            isNew={!selectedLead}
+            statusOptions={STATUS_OPTIONS}
+          />
+        )}
+      </main>
+
+      {/* FAB and Modals - Keeping inside App for context access */}
+      {activeTab === 'list' && (
+        <>
+          {isFabOpen && <div className="absolute inset-0 bg-white/80 z-20 backdrop-blur-sm" onClick={() => setIsFabOpen(false)} />}
+          <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-30">
+            {isFabOpen && (
+              <>
+                <button onClick={handleClearAll} className="flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-full shadow-lg border border-red-200"><span className="text-xs font-bold">BORRAR TODO</span><div className="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center"><Trash2 size={16} /></div></button>
+                <button onClick={() => setShowImport(true)} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-full shadow-lg border border-gray-100"><span className="text-xs">Importar CSV</span><div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center"><Database size={16} /></div></button>
+                <button onClick={handleNextBestLead} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-full shadow-lg border border-gray-100"><span className="text-xs">Siguiente Lead (AI)</span><div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center"><ArrowRight size={16} /></div></button>
+                <button onClick={openNew} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-full shadow-lg border border-gray-100"><span className="text-xs">Manual</span><div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><User size={16} /></div></button>
+              </>
+            )}
+            <button onClick={() => setIsFabOpen(!isFabOpen)} className={`rounded-full p-4 shadow-xl transition-all ${isFabOpen ? 'bg-gray-800 rotate-45' : 'bg-blue-600 hover:bg-blue-700'} text-white`}><Plus size={28} /></button>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'detail' && <button onClick={handleNextBestLead} className="absolute bottom-6 right-6 bg-green-600 text-white rounded-full p-4 shadow-xl z-30"><ArrowRight size={28} /></button>}
+
+      {showImport && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">Importar Leads</h3>
+            {importing ? <p>Procesando...</p> : <div className="border-2 border-dashed p-8 text-center cursor-pointer" onClick={() => fileInputRef.current.click()}><Upload className="mx-auto mb-2" /><span className="text-sm">Seleccionar CSV</span><input type="file" accept=".csv,.txt" ref={fileInputRef} className="hidden" onChange={handleFileUpload} /></div>}
+            <button onClick={() => setShowImport(false)} className="mt-4 w-full py-2 text-gray-500 text-sm">Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
