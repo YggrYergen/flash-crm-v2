@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import {
-  Plus, Search, Layout, Database, ArrowRight, Upload, User, CheckCircle, Target, Trash2, Settings
+  Plus, Search, Layout, Database, ArrowRight, Upload, User, CheckCircle, Target, Trash2, Settings, Calendar as CalendarIcon
 } from 'lucide-react';
 import { STATUS_OPTIONS, PAYMENT_STATUS, parseCSVLine, calculateCompositeScore } from './utils/helpers';
 import { Notification } from './components/ui/Notification';
@@ -9,6 +9,7 @@ import { LeadDetail } from './components/lead/LeadDetail';
 import { LeadForm } from './components/lead/LeadForm';
 import { TrackingDashboard } from './components/tracking/TrackingDashboard';
 import { DataSettings } from './components/settings/DataSettings';
+import { CalendarView } from './components/calendar/CalendarView';
 import { ConfirmModal } from './components/ui/ConfirmModal';
 
 export default function App() {
@@ -32,12 +33,33 @@ export default function App() {
 
   const [formData, setFormData] = useState({
     name: '', company: '', phone: '', email: '',
-    status: 'lead', paymentStatus: 'na', serviceDetails: '',
+    status: 'lead', paymentStatus: 'na', interests: [], serviceDetails: '',
     value: '', website: '', full_address: '', place_link: '',
     fitnessScore: 50, webScore: 0, gbpScore: 0, sercotecScore: 0
   });
 
   const fileInputRef = useRef(null);
+  const mainRef = useRef(null);
+  const scrollPositionRef = useRef(0);
+
+  const handleTabChange = (tab) => {
+    if (activeTab === 'list' && mainRef.current) {
+      scrollPositionRef.current = mainRef.current.scrollTop;
+    }
+    setActiveTab(tab);
+  };
+
+  // Restore scroll when entering 'list' tab
+  useLayoutEffect(() => {
+    if (activeTab === 'list' && mainRef.current) {
+      const timeoutId = setTimeout(() => {
+        if (mainRef.current) {
+          mainRef.current.scrollTop = scrollPositionRef.current;
+        }
+      }, 0);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [activeTab]);
 
   // --- LOCAL STORAGE ---
   useEffect(() => {
@@ -62,22 +84,26 @@ export default function App() {
   const showToast = (msg) => setNotification(msg);
 
   // --- ACTIONS ---
-  const handleQuickUpdate = (field, value) => {
-    if (!selectedLead) return;
+  const handleLeadUpdate = (leadId, fieldOrUpdates, value) => {
+    // Allow updates to be a single field (key, value) wrapper or an object
+    const updatesObj = (typeof fieldOrUpdates === 'string') ? { [fieldOrUpdates]: value } : fieldOrUpdates;
 
-    const updatedLead = { ...selectedLead, [field]: value, updatedAt: Date.now() };
-    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-
+    const updatedLeads = leads.map(l => l.id === leadId ? { ...l, ...updatesObj, updatedAt: Date.now() } : l);
     saveLeadsToStorage(updatedLeads);
-    setSelectedLead(updatedLead);
-    showToast("Estado actualizado");
+    if (selectedLead && selectedLead.id === leadId) {
+      setSelectedLead({ ...selectedLead, ...updatesObj, updatedAt: Date.now() });
+    }
+  };
+
+  const handleQuickUpdate = (fieldOrObj, value) => {
+    if (!selectedLead) return;
+    handleLeadUpdate(selectedLead.id, fieldOrObj, value);
+    if (typeof fieldOrObj === 'string' && fieldOrObj === 'status') showToast("Estado actualizado");
   };
 
   // Helper for List View Actions
   const handleQuickUpdateByObj = (lead, field, value) => {
-    const updatedLead = { ...lead, [field]: value, updatedAt: Date.now() };
-    const updatedLeads = leads.map(l => l.id === lead.id ? updatedLead : l);
-    saveLeadsToStorage(updatedLeads);
+    handleLeadUpdate(lead.id, field, value);
     showToast("Estado actualizado");
   };
 
@@ -99,7 +125,7 @@ export default function App() {
 
     if (selectedLead && selectedLead.id === leadToDelete.id) {
       setSelectedLead(null);
-      setActiveTab('list');
+      handleTabChange('list');
     }
 
     setLeadToDelete(null);
@@ -167,6 +193,7 @@ export default function App() {
           place_link: rawData.place_link || '',
           status: 'lead',
           paymentStatus: 'na',
+          interests: [],
           fitnessScore: scores.generalScore,
           webScore: scores.webScore,
           gbpScore: scores.gbpScore,
@@ -249,7 +276,7 @@ export default function App() {
       saveLeadsToStorage([newLead, ...leads]);
       showToast("Creado");
     }
-    setActiveTab('list');
+    handleTabChange('list');
     resetForm();
   };
 
@@ -286,15 +313,15 @@ export default function App() {
 
   const resetForm = () => {
     setFormData({
-      name: '', company: '', phone: '', email: '', status: 'lead', paymentStatus: 'na',
+      name: '', company: '', phone: '', email: '', status: 'lead', paymentStatus: 'na', interests: [],
       serviceDetails: '', value: '', website: '', full_address: '', place_link: '',
       fitnessScore: 50, webScore: 0, gbpScore: 0, sercotecScore: 0
     });
     setSelectedLead(null);
   };
 
-  const openNew = () => { resetForm(); setActiveTab('form'); setIsFabOpen(false); };
-  const openDetail = (lead) => { setSelectedLead(lead); setFormData(lead); setActiveTab('detail'); };
+  const openNew = () => { resetForm(); handleTabChange('form'); setIsFabOpen(false); };
+  const openDetail = (lead) => { setSelectedLead(lead); setFormData(lead); handleTabChange('detail'); };
 
   const filteredLeads = useMemo(() => {
     return leads.filter(l => {
@@ -346,14 +373,20 @@ export default function App() {
           <div className="flex gap-2">
             <button
               className={`p-2 rounded-full ${activeTab === 'tracking' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}
-              onClick={() => setActiveTab('tracking')}
+              onClick={() => handleTabChange('tracking')}
             >
               <Target size={18} />
             </button>
-            <button className={`p-2 rounded-full ${activeTab === 'list' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`} onClick={() => setActiveTab('list')}>
+            <button className={`p-2 rounded-full ${activeTab === 'list' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`} onClick={() => handleTabChange('list')}>
               <Layout size={18} />
             </button>
-            <button className={`p-2 rounded-full ${activeTab === 'settings' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`} onClick={() => setActiveTab('settings')}>
+            <button
+              onClick={() => handleTabChange('calendar')}
+              className={`p-2 rounded-full ${activeTab === 'calendar' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-600'}`}
+            >
+              <CalendarIcon size={18} />
+            </button>
+            <button className={`p-2 rounded-full ${activeTab === 'settings' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`} onClick={() => handleTabChange('settings')}>
               <Settings size={18} />
             </button>
           </div>
@@ -380,7 +413,7 @@ export default function App() {
         )}
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-20 relative">
+      <main ref={mainRef} className="flex-1 overflow-y-auto pb-20 relative">
         {activeTab === 'list' && (
           <LeadList
             stats={stats}
@@ -398,7 +431,7 @@ export default function App() {
           <TrackingDashboard
             leads={leads}
             openDetail={openDetail}
-            setActiveTab={setActiveTab}
+            setActiveTab={handleTabChange}
           />
         )}
 
@@ -411,10 +444,20 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'calendar' && (
+          <CalendarView
+            leads={leads}
+            onUpdateLead={handleLeadUpdate}
+            navigateToLead={(lead) => {
+              openDetail(lead);
+            }}
+          />
+        )}
+
         {activeTab === 'detail' && selectedLead && (
           <LeadDetail
             lead={selectedLead}
-            setActiveTab={setActiveTab}
+            setActiveTab={handleTabChange}
             statusOptions={STATUS_OPTIONS}
             paymentStatusOptions={PAYMENT_STATUS}
             onUpdate={handleQuickUpdate}
@@ -428,7 +471,7 @@ export default function App() {
             formData={formData}
             setFormData={setFormData}
             onSave={handleSave}
-            onCancel={() => selectedLead ? setActiveTab('detail') : setActiveTab('list')}
+            onCancel={() => selectedLead ? handleTabChange('detail') : handleTabChange('list')}
             onDelete={handleDelete}
             isNew={!selectedLead}
             statusOptions={STATUS_OPTIONS}

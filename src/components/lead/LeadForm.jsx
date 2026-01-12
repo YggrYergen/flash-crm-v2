@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
+import { INTEREST_OPTIONS } from '../../utils/helpers';
 
 export const LeadForm = ({
     formData,
@@ -10,6 +11,14 @@ export const LeadForm = ({
     isNew,
     statusOptions
 }) => {
+    const handleInterestToggle = (interestId) => {
+        const currentInterests = formData.interests || [];
+        const newInterests = currentInterests.includes(interestId)
+            ? currentInterests.filter(i => i !== interestId)
+            : [...currentInterests, interestId];
+        setFormData({ ...formData, interests: newInterests });
+    };
+
     return (
         <div className="p-4 bg-white min-h-full">
             <div className="flex justify-between items-center mb-6">
@@ -40,6 +49,24 @@ export const LeadForm = ({
                             <option key={opt.id} value={opt.id}>{opt.label}</option>
                         ))}
                     </select>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Interés (Selección Múltiple)</label>
+                    <div className="flex flex-wrap gap-2">
+                        {INTEREST_OPTIONS.map(opt => (
+                            <button
+                                key={opt.id}
+                                onClick={(e) => { e.preventDefault(); handleInterestToggle(opt.id); }}
+                                className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${(formData.interests || []).includes(opt.id)
+                                        ? opt.color.replace('text-', 'border-').replace('bg-', 'bg-opacity-50 ') + ' border-2'
+                                        : 'bg-white text-gray-500 border-gray-200'
+                                    }`}
+                            >
+                                {opt.label} {(formData.interests || []).includes(opt.id) && '✓'}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <div>

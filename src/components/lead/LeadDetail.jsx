@@ -8,8 +8,9 @@ import { ProgressBar } from '../ui/ProgressBar';
 import { NoteItem } from './NoteItem';
 import { PostCallModal } from './PostCallModal';
 import { ReminderModal } from '../tracking/ReminderModal';
-import { QUICK_NOTES } from '../../utils/helpers';
-import { Truck, Bell } from 'lucide-react';
+import { EventModal } from '../calendar/EventModal';
+import { QUICK_NOTES, INTEREST_OPTIONS, EVENT_TYPES } from '../../utils/helpers';
+import { Truck, Bell, Calendar as CalendarIcon } from 'lucide-react';
 
 export const LeadDetail = ({
     lead,
@@ -24,17 +25,22 @@ export const LeadDetail = ({
     const [currentNote, setCurrentNote] = useState('');
     const [showPostCall, setShowPostCall] = useState(false);
     const [showReminder, setShowReminder] = useState(false);
+    const [showEventModal, setShowEventModal] = useState(false);
+    const [isPressing, setIsPressing] = useState(false);
     const pressTimer = useRef(null);
 
     const handlePressStart = () => {
         if (isStatusEditing) return;
+        setIsPressing(true);
         pressTimer.current = setTimeout(() => {
             setIsStatusEditing(true);
+            setIsPressing(false);
             if (window.navigator && window.navigator.vibrate) window.navigator.vibrate(50);
-        }, 3000);
+        }, 800);
     };
 
     const handlePressEnd = () => {
+        setIsPressing(false);
         if (pressTimer.current) clearTimeout(pressTimer.current);
     };
 
@@ -81,6 +87,19 @@ export const LeadDetail = ({
         onAddNote(`⏰ Recordatorio: ${reminder.note} (${new Date(reminder.dueAt).toLocaleString()})`);
     };
 
+    const handleEventSave = (event) => {
+        const currentEvents = lead.events || [];
+        const newEventList = [...currentEvents, event];
+
+        const noteContent = `📅 Evento Agendado: ${event.title} (${new Date(event.start).toLocaleString()})`;
+        const newNote = { content: noteContent, timestamp: Date.now(), id: Math.random().toString(36).substr(2, 9) };
+        const currentNotes = lead.notes || [];
+        const newNoteList = [newNote, ...currentNotes];
+
+        // Batch update to avoid race condition
+        onUpdate({ events: newEventList, notes: newNoteList });
+    };
+
     const handleDeliveryUpdate = (status, details = '') => {
         onUpdate('delivery', {
             ...lead.delivery,
@@ -88,6 +107,14 @@ export const LeadDetail = ({
             details: details || lead.delivery?.details,
             updatedAt: Date.now()
         });
+    };
+
+    const handleInterestToggle = (interestId) => {
+        const currentInterests = lead.interests || [];
+        const newInterests = currentInterests.includes(interestId)
+            ? currentInterests.filter(i => i !== interestId)
+            : [...currentInterests, interestId];
+        onUpdate('interests', newInterests);
     };
 
     return (
@@ -102,6 +129,12 @@ export const LeadDetail = ({
                 isOpen={showReminder}
                 onClose={() => setShowReminder(false)}
                 onSave={handleReminderSave}
+            />
+
+            <EventModal
+                isOpen={showEventModal}
+                onClose={() => setShowEventModal(false)}
+                onSave={handleEventSave}
             />
 
             <div className="sticky top-0 bg-white z-10 border-b border-gray-100 p-4 flex justify-between items-center shadow-sm">
@@ -125,10 +158,33 @@ export const LeadDetail = ({
                 <button onClick={handleCall} className="flex flex-col items-center gap-1 p-2 rounded-lg text-green-600 bg-green-50"><Phone size={20} /> <span className="text-[10px] font-bold">Llamar</span></button>
                 <a href={`https://wa.me/${lead.phone?.replace(/[^0-9]/g, '')}`} target="_blank" className="flex flex-col items-center gap-1 p-2 rounded-lg text-green-600 bg-green-50"><MessageCircle size={20} /> <span className="text-[10px] font-bold">WhatsApp</span></a>
                 <a href={`mailto:${lead.email}`} className="flex flex-col items-center gap-1 p-2 rounded-lg text-blue-600 bg-blue-50"><Mail size={20} /> <span className="text-[10px] font-bold">Email</span></a>
-                <button onClick={() => setShowReminder(true)} className="flex flex-col items-center gap-1 p-2 rounded-lg text-orange-600 bg-orange-50"><Bell size={20} /> <span className="text-[10px] font-bold">Recordar</span></button>
+                <button onClick={() => setShowEventModal(true)} className="flex flex-col items-center gap-1 p-2 rounded-lg text-purple-600 bg-purple-50"><CalendarIcon size={20} /> <span className="text-[10px] font-bold">Agendar</span></button>
             </div>
 
             <div className="p-4 space-y-6">
+                {(lead.events && lead.events.length > 0) && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                        <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <CalendarIcon size={14} className="text-purple-600" /> Próximos Eventos
+                        </h4>
+                        <div className="space-y-2">
+                            {lead.events.filter(e => e.start >= Date.now()).sort((a, b) => a.start - b.start).map(event => {
+                                const type = EVENT_TYPES.find(t => t.id === event.type) || EVENT_TYPES[3];
+                                return (
+                                    <div key={event.id} className={`p-2 rounded-lg border flex justify-between items-center ${type.color.replace('text-', 'bg-').replace('bg-', 'bg-opacity-10 ')}`}>
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-800">{event.title}</p>
+                                            <p className="text-[10px] text-gray-500">{new Date(event.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
+                                        </div>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${type.color}`}>{type.label}</span>
+                                    </div>
+                                );
+                            })}
+                            {lead.events.filter(e => e.start >= Date.now()).length === 0 && <p className="text-xs text-gray-400 italic">No hay eventos próximos.</p>}
+                        </div>
+                    </div>
+                )}
+
                 <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                     <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2"><Target size={14} className="text-blue-600" /> Análisis</h4>
                     <ProgressBar label="Web" score={lead.webScore || 0} colorClass="bg-blue-500" icon={Layout} />
@@ -137,21 +193,64 @@ export const LeadDetail = ({
                 </div>
 
                 <div
-                    className={`bg-white rounded-lg border border-gray-100 p-4 shadow-sm transition-all relative overflow-hidden ${isStatusEditing ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
-                    onMouseDown={handlePressStart} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd} onTouchStart={handlePressStart} onTouchEnd={handlePressEnd}
+                    className={`bg-white rounded-lg border border-gray-100 p-4 shadow-sm transition-all relative overflow-hidden ${isStatusEditing ? 'ring-2 ring-blue-500 bg-blue-50' : ''} ${isPressing ? 'scale-[0.98] bg-gray-50' : ''} select-none`}
+                    onMouseDown={handlePressStart}
+                    onMouseUp={handlePressEnd}
+                    onMouseLeave={handlePressEnd}
+                    onTouchStart={handlePressStart}
+                    onTouchEnd={handlePressEnd}
+                    onTouchMove={handlePressEnd} // Change: Cancel if scrolling
+                    onContextMenu={(e) => e.preventDefault()} // Change: Prevent right-click menu
                 >
                     <div className="flex justify-between items-center mb-3">
                         <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Estado {isStatusEditing ? ' (EDITANDO)' : ''}</h4>
-                        {isStatusEditing && <button onClick={(e) => { e.stopPropagation(); setIsStatusEditing(false); }} className="text-xs bg-gray-200 px-2 py-1 rounded"><X size={12} /> Cerrar</button>}
+                        {isStatusEditing ? (
+                            <button onClick={(e) => { e.stopPropagation(); setIsStatusEditing(false); }} className="text-xs bg-gray-200 px-2 py-1 rounded"><X size={12} /> Cerrar</button>
+                        ) : (
+                            <button onClick={(e) => { e.stopPropagation(); setIsStatusEditing(true); }} className="text-xs text-blue-500 hover:bg-blue-50 px-2 py-1 rounded flex items-center gap-1"><Edit3 size={12} /> Editar</button>
+                        )}
                     </div>
                     {isStatusEditing ? (
                         <div className="space-y-4 animate-in fade-in">
                             <div className="flex flex-wrap gap-2">{statusOptions.map(opt => <button key={opt.id} onClick={() => onUpdate('status', opt.id)} className={`px-3 py-2 rounded-lg text-xs font-medium border ${lead.status === opt.id ? 'bg-blue-100 border-blue-400' : 'bg-white'}`}>{opt.label}</button>)}</div>
                             <div className="flex flex-wrap gap-2">{paymentStatusOptions.map(opt => <button key={opt.id} onClick={() => onUpdate('paymentStatus', opt.id)} className={`px-3 py-2 rounded-lg text-xs font-medium border ${lead.paymentStatus === opt.id ? 'bg-blue-100 border-blue-400' : 'bg-white'}`}>{opt.label}</button>)}</div>
+
+                            <div className="border-t border-gray-100 pt-2">
+                                <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Intereses</h5>
+                                <div className="flex flex-wrap gap-2">
+                                    {INTEREST_OPTIONS.map(opt => (
+                                        <button
+                                            key={opt.id}
+                                            onClick={() => handleInterestToggle(opt.id)}
+                                            className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${(lead.interests || []).includes(opt.id)
+                                                ? opt.color.replace('text-', 'border-').replace('bg-', 'bg-opacity-50 ') + ' border-2'
+                                                : 'bg-white text-gray-500 border-gray-200'
+                                                }`}
+                                        >
+                                            {opt.label} {(lead.interests || []).includes(opt.id) && '✓'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <>
                             <div className="flex flex-wrap gap-2 pointer-events-none"><StatusBadge statusId={lead.status} options={statusOptions} /><StatusBadge statusId={lead.paymentStatus} options={paymentStatusOptions} /></div>
+
+                            {(lead.interests && lead.interests.length > 0) && (
+                                <div className="flex flex-wrap gap-1 mt-2 pointer-events-none">
+                                    {lead.interests.map(intId => {
+                                        const opt = INTEREST_OPTIONS.find(o => o.id === intId);
+                                        if (!opt) return null;
+                                        return (
+                                            <span key={intId} className={`px-2 py-0.5 rounded text-[10px] font-bold border ${opt.color.replace('bg-', 'border-').replace('text-', 'text-').replace('100', '200')}`}>
+                                                {opt.label}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
                             <div className="w-full text-[10px] text-gray-300 italic mt-2 text-right flex justify-end items-center gap-1"><Edit3 size={10} /> Mantén 3s para editar</div>
                         </>
                     )}

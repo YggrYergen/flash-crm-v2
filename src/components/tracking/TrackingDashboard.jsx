@@ -19,30 +19,65 @@ export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
             return contactDate.getTime() === today.getTime();
         }).length;
 
-        // Reminders
+        // Reminders & Events
         const now = Date.now();
-        const pendingReminders = [];
+        const pendingActions = [];
 
         leads.forEach(lead => {
+            // Existing Reminders
             if (lead.reminders && Array.isArray(lead.reminders)) {
                 lead.reminders.forEach(rem => {
                     if (!rem.completed && rem.dueAt) {
-                        pendingReminders.push({ ...rem, lead });
+                        pendingActions.push({ ...rem, lead, type: 'reminder' });
+                    }
+                });
+            }
+
+            // New Calendar Events (Calls and Meetings)
+            if (lead.events && Array.isArray(lead.events)) {
+                lead.events.forEach(ev => {
+                    // Include future events or past incomplete events (if we tracked completion, which we don't yet explicitly other than time, but let's show upcoming)
+                    // Showing all upcoming events or past ones from today? 
+                    // User said: "mostrar las llamadas agendadas, primero las más próximas, último las más lejanas"
+                    // We should show everything not done? For now just time based.
+                    if (ev.type === 'call' || ev.type === 'meeting') {
+                        pendingActions.push({
+                            id: ev.id,
+                            dueAt: ev.start,
+                            note: ev.title + (ev.notes ? ` - ${ev.notes}` : ''),
+                            lead,
+                            type: 'event'
+                        });
                     }
                 });
             }
         });
 
-        // Sort reminders: Overdue first, then by urgency
-        pendingReminders.sort((a, b) => a.dueAt - b.dueAt);
+        // Sort: Overdue/Earliest first
+        pendingActions.sort((a, b) => a.dueAt - b.dueAt);
 
-        // Deliveries (Closed Clients)
-        const pendingDeliveries = leads.filter(l =>
-            (l.status === 'cerrado' || l.paymentStatus === 'pagado') &&
-            l.delivery?.status !== 'delivered'
-        );
+        // Deliveries (Closed Clients) & Deadlines
+        const pendingDeliveries = [];
+        leads.forEach(l => {
+            if ((l.status === 'cerrado' || l.paymentStatus === 'pagado') && l.delivery?.status !== 'delivered') {
+                pendingDeliveries.push({ ...l, isEvent: false });
+            }
 
-        return { contactedToday, pendingReminders, pendingDeliveries };
+            // Deadline events
+            if (l.events) {
+                l.events.filter(e => e.type === 'deadline').forEach(ev => {
+                    pendingDeliveries.push({
+                        id: ev.id,
+                        name: l.name,
+                        delivery: { status: 'scheduled', details: ev.title },
+                        isEvent: true,
+                        lead: l
+                    });
+                });
+            }
+        });
+
+        return { contactedToday, pendingActions, pendingDeliveries };
     }, [leads]);
 
     const formatTime = (timestamp) => {
@@ -94,17 +129,17 @@ export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
                 {/* Reminders / Calls Section */}
                 <div>
                     <h3 className="text-gray-800 font-bold mb-3 flex items-center gap-2">
-                        <Phone size={18} className="text-blue-600" /> Por Llamar
+                        <Phone size={18} className="text-blue-600" /> Próximas Llamadas y Reuniones
                     </h3>
 
-                    {stats.pendingReminders.length === 0 ? (
+                    {stats.pendingActions.length === 0 ? (
                         <div className="bg-white rounded-xl p-6 text-center shadow-sm border border-gray-100">
                             <CheckCircle className="mx-auto text-green-400 mb-2" size={32} />
                             <p className="text-gray-400 text-sm">¡Todo al día! No hay llamadas pendientes.</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {stats.pendingReminders.map((item, idx) => (
+                            {stats.pendingActions.map((item, idx) => (
                                 <div key={idx} onClick={() => openDetail(item.lead)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-transform">
                                     <div className="flex-1">
                                         <div className="flex justify-between items-start">
@@ -132,21 +167,24 @@ export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {stats.pendingDeliveries.map(lead => (
-                                <div key={lead.id} onClick={() => openDetail(lead)} className="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-green-500 flex justify-between items-center">
-                                    <div>
-                                        <h4 className="font-bold text-gray-800">{lead.name}</h4>
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            {lead.delivery?.details || "Servicio pendiente"}
-                                        </p>
+                            {stats.pendingDeliveries.map(item => {
+                                const lead = item.isEvent ? item.lead : item;
+                                return (
+                                    <div key={item.id} onClick={() => openDetail(lead)} className="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-green-500 flex justify-between items-center">
+                                        <div>
+                                            <h4 className="font-bold text-gray-800">{lead.name}</h4>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {item.isEvent ? `📅 ${item.delivery.details}` : (lead.delivery?.details || "Servicio pendiente")}
+                                            </p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`text-xs px-2 py-1 rounded-full ${item.isEvent ? 'bg-purple-100 text-purple-700' : (lead.delivery?.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700')}`}>
+                                                {item.isEvent ? 'Agendado' : (lead.delivery?.status === 'in_progress' ? 'En proceso' : 'Pendiente')}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <span className={`text-xs px-2 py-1 rounded-full ${lead.delivery?.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                                            {lead.delivery?.status === 'in_progress' ? 'En proceso' : 'Pendiente'}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>

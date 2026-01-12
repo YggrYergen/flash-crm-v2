@@ -14,6 +14,19 @@ export const PAYMENT_STATUS = [
     { id: 'pagado', label: 'Pagado', color: 'bg-green-100 text-green-700' },
 ];
 
+export const INTEREST_OPTIONS = [
+    { id: 'web', label: 'Web', color: 'bg-blue-100 text-blue-700' },
+    { id: 'gm', label: 'GM', color: 'bg-indigo-100 text-indigo-700' },
+    { id: 'sercotec', label: 'SERCOTEC', color: 'bg-orange-100 text-orange-700' },
+];
+
+export const EVENT_TYPES = [
+    { id: 'meeting', label: 'Reunión', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    { id: 'call', label: 'Llamada', color: 'bg-green-100 text-green-700 border-green-200' },
+    { id: 'deadline', label: 'Entrega', color: 'bg-red-100 text-red-700 border-red-200' },
+    { id: 'other', label: 'Otro', color: 'bg-gray-100 text-gray-700 border-gray-200' },
+];
+
 export const QUICK_NOTES = [
     "No contestó", "Me pidió llamar mañana", "Envié propuesta", "Reunión agendada", "Interesado, seguimiento alto"
 ];
