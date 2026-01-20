@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import {
-  Plus, Search, Layout, Database, ArrowRight, Upload, User, CheckCircle, Target, Trash2, Settings, Calendar as CalendarIcon
+  Plus, Search, Layout, Database, ArrowRight, Upload, User, Target, Trash2, Settings, Calendar as CalendarIcon, Cloud
 } from 'lucide-react';
 import { STATUS_OPTIONS, PAYMENT_STATUS, parseCSVLine, calculateCompositeScore } from './utils/helpers';
 import { Notification } from './components/ui/Notification';
@@ -11,10 +11,20 @@ import { TrackingDashboard } from './components/tracking/TrackingDashboard';
 import { DataSettings } from './components/settings/DataSettings';
 import { CalendarView } from './components/calendar/CalendarView';
 import { ConfirmModal } from './components/ui/ConfirmModal';
+import { useLeads } from './context/LeadsContext';
 
 export default function App() {
-  const [leads, setLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    leads,
+    loading,
+    addLead,
+    addLeads,
+    updateLead,
+    deleteLead,
+    clearAllLocal,
+    mode
+  } = useLeads();
+
   const [notification, setNotification] = useState(null);
 
   // UI State
@@ -61,37 +71,18 @@ export default function App() {
     }
   }, [activeTab]);
 
-  // --- LOCAL STORAGE ---
-  useEffect(() => {
-    const loadLeads = () => {
-      const storedLeads = localStorage.getItem('flashcrm_leads');
-      if (storedLeads) {
-        try {
-          const parsed = JSON.parse(storedLeads);
-          setLeads(parsed);
-        } catch (e) { console.error("Error loading local data", e); }
-      }
-      setLoading(false);
-    };
-    loadLeads();
-  }, []);
-
-  const saveLeadsToStorage = (newLeads) => {
-    setLeads(newLeads);
-    localStorage.setItem('flashcrm_leads', JSON.stringify(newLeads));
-  };
-
   const showToast = (msg) => setNotification(msg);
 
   // --- ACTIONS ---
-  const handleLeadUpdate = (leadId, fieldOrUpdates, value) => {
-    // Allow updates to be a single field (key, value) wrapper or an object
+  const handleLeadUpdate = async (leadId, fieldOrUpdates, value) => {
     const updatesObj = (typeof fieldOrUpdates === 'string') ? { [fieldOrUpdates]: value } : fieldOrUpdates;
-
-    const updatedLeads = leads.map(l => l.id === leadId ? { ...l, ...updatesObj, updatedAt: Date.now() } : l);
-    saveLeadsToStorage(updatedLeads);
-    if (selectedLead && selectedLead.id === leadId) {
-      setSelectedLead({ ...selectedLead, ...updatesObj, updatedAt: Date.now() });
+    try {
+      await updateLead(leadId, updatesObj);
+      if (selectedLead && selectedLead.id === leadId) {
+        setSelectedLead({ ...selectedLead, ...updatesObj, updatedAt: Date.now() });
+      }
+    } catch (e) {
+      showToast("Error al guardar cambios");
     }
   };
 
@@ -101,7 +92,6 @@ export default function App() {
     if (typeof fieldOrObj === 'string' && fieldOrObj === 'status') showToast("Estado actualizado");
   };
 
-  // Helper for List View Actions
   const handleQuickUpdateByObj = (lead, field, value) => {
     handleLeadUpdate(lead.id, field, value);
     showToast("Estado actualizado");
@@ -111,25 +101,19 @@ export default function App() {
     setLeadToDelete(lead);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!leadToDelete) return;
-
-    // SOFT DELETE Logic
-    const updatedLeads = leads.map(l =>
-      l.id === leadToDelete.id
-        ? { ...l, deletedAt: Date.now() }
-        : l
-    );
-
-    saveLeadsToStorage(updatedLeads);
-
-    if (selectedLead && selectedLead.id === leadToDelete.id) {
-      setSelectedLead(null);
-      handleTabChange('list');
+    try {
+      await deleteLead(leadToDelete.id);
+      if (selectedLead && selectedLead.id === leadToDelete.id) {
+        setSelectedLead(null);
+        handleTabChange('list');
+      }
+      setLeadToDelete(null);
+      showToast("Lead movido a papelera 🗑️");
+    } catch (e) {
+      showToast("Error al eliminar");
     }
-
-    setLeadToDelete(null);
-    showToast("Lead movido a papelera 🗑️");
   };
 
   // --- CSV IMPORT ---
@@ -140,15 +124,13 @@ export default function App() {
     setImporting(true);
     const reader = new FileReader();
 
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const text = event.target.result;
       const lines = text.split('\n');
 
       const newLeads = [];
-      let count = 0;
       let skippedInvalid = 0;
 
-      // Smart Header Detection
       let startIndex = 0;
       const firstLine = lines[0] ? lines[0].trim().toLowerCase() : '';
       if (firstLine.includes('business_id') || firstLine.includes('phone') || firstLine.includes('name')) {
@@ -161,12 +143,8 @@ export default function App() {
         const cols = parseCSVLine(line);
         if (cols.length < 3) continue;
 
-        // Strict Phone Validation (+569...)
         let phone = cols[1] || '';
         const cleanPhone = phone.replace(/[^0-9+]/g, '');
-
-        // Flexible check: must contain +569 or 569 and be roughly correct length
-        // e.g. +56 9 1234 5678 (12 digits), 56912345678 (11 digits)
         const isValidPhone = /^(?:\+?56)?9\d{8}$/.test(cleanPhone);
 
         if (!isValidPhone) {
@@ -204,12 +182,14 @@ export default function App() {
           createdAt: Date.now(),
           updatedAt: Date.now()
         });
-        count++;
       }
 
-      const mergedLeads = [...newLeads, ...leads];
-      saveLeadsToStorage(mergedLeads);
-      showToast(`¡${count} detectados! (${skippedInvalid} omitidos por mal número)`);
+      try {
+        await addLeads(newLeads);
+        showToast(`¡${newLeads.length} detectados y subidos! (${skippedInvalid} omitidos)`);
+      } catch (e) {
+        showToast("Error al importar");
+      }
 
       setImporting(false);
       setShowImport(false);
@@ -223,7 +203,6 @@ export default function App() {
     const isDetailView = activeTab === 'detail';
     const currentId = isDetailView ? selectedLead?.id : null;
 
-    // If we are currently viewing a lead, add it to 'skipped' so we don't immediately return to it
     if (currentId) {
       setSkippedLeadIds(prev => [...prev, currentId]);
     }
@@ -233,17 +212,14 @@ export default function App() {
       .sort((a, b) => (b.fitnessScore || 0) - (a.fitnessScore || 0));
 
     if (pendingLeads.length > 0) {
-      // If we are just skipping, the "next best" is the first one in the filtered list
       openDetail(pendingLeads[0]);
       setIsFabOpen(false);
     } else {
-      // Logic Reset: If no more pending leads found *excluding skipped*, maybe verify if there are ANY pending leads?
-      // If truly none, show toast. If only skipped ones remain, maybe reset skipped?
       const allPending = leads.filter(l => l.status === 'lead' && l.id !== currentId);
       if (allPending.length > 0 && pendingLeads.length === 0) {
         showToast("Has revisado todos los candidatos. Reiniciando ciclo...");
         setSkippedLeadIds([]);
-        openDetail(allPending[0]); // Start over
+        openDetail(allPending[0]);
       } else {
         showToast("¡Buen trabajo! No hay más leads pendientes.");
       }
@@ -251,33 +227,37 @@ export default function App() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name) return showToast("Falta el nombre");
 
     const payload = {
       ...formData,
       updatedAt: Date.now(),
-      searchStr: (formData.name + ' ' + formData.company).toLowerCase()
+      searchStr: (formData.name + ' ' + (formData.company || '')).toLowerCase()
     };
 
-    if (selectedLead) {
-      const updatedLeads = leads.map(l => l.id === selectedLead.id ? { ...l, ...payload } : l);
-      saveLeadsToStorage(updatedLeads);
-      setSelectedLead({ ...selectedLead, ...payload });
-      showToast("Guardado");
-    } else {
-      const newLead = {
-        id: 'lead_' + Date.now(),
-        ...payload,
-        fitnessScore: 50, webScore: 50, gbpScore: 50, sercotecScore: 50,
-        createdAt: Date.now(),
-        notes: []
-      };
-      saveLeadsToStorage([newLead, ...leads]);
-      showToast("Creado");
+    try {
+      if (selectedLead) {
+        await updateLead(selectedLead.id, payload);
+        setSelectedLead({ ...selectedLead, ...payload });
+        showToast("Guardado");
+      } else {
+        const newId = 'lead_' + Date.now();
+        const newLead = {
+          id: newId,
+          ...payload,
+          fitnessScore: payload.fitnessScore || 50,
+          createdAt: Date.now(),
+          notes: []
+        };
+        await addLead(newLead);
+        showToast("Creado");
+      }
+      handleTabChange('list');
+      resetForm();
+    } catch (e) {
+      showToast("Error al guardar");
     }
-    handleTabChange('list');
-    resetForm();
   };
 
   const handleClearAll = () => {
@@ -285,13 +265,19 @@ export default function App() {
     setIsFabOpen(false);
   };
 
-  const confirmClearAll = () => {
-    // Auto-Backup before nuke
-    localStorage.setItem('flashcrm_backup_last', JSON.stringify(leads));
-
-    setLeads([]);
-    localStorage.removeItem('flashcrm_leads');
-    showToast("Base de datos vaciada (Backup guardado)");
+  const confirmClearAll = async () => {
+    if (confirm("¿Estás seguro de que quieres BORRAR TODO?")) {
+      try {
+        if (mode === 'local') {
+          clearAllLocal();
+          showToast("Base de datos local vaciada");
+        } else {
+          showToast("Usa la pestaña Configuración para vaciar la nube");
+        }
+      } catch (e) {
+        showToast("Error al vaciar BD");
+      }
+    }
     setShowClearConfirm(false);
   };
 
@@ -299,16 +285,16 @@ export default function App() {
     if (selectedLead) setLeadToDelete(selectedLead);
   };
 
-  const handleAddNote = (noteContent) => {
+  const handleAddNote = async (noteContent) => {
     if (!selectedLead) return;
     const newNote = { content: noteContent, timestamp: Date.now(), id: Math.random().toString(36).substr(2, 9) };
     const updatedNotes = [newNote, ...(selectedLead.notes || [])];
-
-    const updatedLead = { ...selectedLead, notes: updatedNotes, updatedAt: Date.now() };
-    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-
-    saveLeadsToStorage(updatedLeads);
-    setSelectedLead(updatedLead);
+    try {
+      await updateLead(selectedLead.id, { notes: updatedNotes });
+      setSelectedLead({ ...selectedLead, notes: updatedNotes, updatedAt: Date.now() });
+    } catch (e) {
+      showToast("Error al guardar nota");
+    }
   };
 
   const resetForm = () => {
@@ -325,8 +311,7 @@ export default function App() {
 
   const filteredLeads = useMemo(() => {
     return leads.filter(l => {
-      if (l.deletedAt) return false; // Exclude soft-deleted leads
-
+      if (l.deletedAt) return false;
       const matchesSearch = (l.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (l.company || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFilter = filterStatus === 'todos' || l.status === filterStatus;
@@ -357,18 +342,12 @@ export default function App() {
         onConfirm={confirmDelete}
         message={`¿Estás seguro de eliminar a ${leadToDelete?.name}?`}
       />
-      <ConfirmModal
-        isOpen={showClearConfirm}
-        onClose={() => setShowClearConfirm(false)}
-        onConfirm={confirmClearAll}
-        title="⚠️ ZONA DE PELIGRO"
-        message="¿Estás seguro de ELIMINAR TODOS los leads? Esta acción no se puede deshacer y perderás toda la información."
-      />
 
       <header className="bg-white px-4 py-3 shadow-sm z-10 flex-none">
         <div className="flex justify-between items-center mb-2">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-2">
-            Flash CRM <span className="text-xs bg-gray-100 text-gray-500 px-1 rounded">v2.0</span>
+            Flash CRM <span className="text-xs bg-gray-100 text-gray-500 px-1 rounded">v2.1</span>
+            {mode === 'cloud' && <Cloud size={14} className="text-blue-500 animate-pulse" />}
           </h1>
           <div className="flex gap-2">
             <button
@@ -437,9 +416,6 @@ export default function App() {
 
         {activeTab === 'settings' && (
           <DataSettings
-            leads={leads}
-            setLeads={setLeads}
-            saveLeads={saveLeadsToStorage}
             showToast={showToast}
           />
         )}
@@ -479,7 +455,7 @@ export default function App() {
         )}
       </main>
 
-      {/* FAB and Modals - Keeping inside App for context access */}
+      {/* FAB and Modals */}
       {activeTab === 'list' && (
         <>
           {isFabOpen && <div className="absolute inset-0 bg-white/80 z-20 backdrop-blur-sm" onClick={() => setIsFabOpen(false)} />}
