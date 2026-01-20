@@ -36,7 +36,9 @@ export const LeadList = ({
                     <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                         <TrendingUp size={14} className="text-blue-400" /> Resumen
                     </h2>
-                    <div className="text-xs bg-white/10 px-2 py-0.5 rounded text-gray-300">Total: {stats.total}</div>
+                    <div className="text-xs bg-white/10 px-2 py-0.5 rounded text-gray-300">
+                        {filteredLeads.length !== stats.total ? `Viendo ${filteredLeads.length} de ${stats.total}` : `Total: ${stats.total}`}
+                    </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                     <div className="bg-white/10 rounded-lg p-3 relative overflow-hidden cursor-pointer" onClick={() => setFilterStatus('lead')}>

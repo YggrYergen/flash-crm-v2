@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import {
-  Plus, Search, Layout, Database, ArrowRight, Upload, User, Target, Trash2, Settings, Calendar as CalendarIcon, Cloud
+  Plus, Search, Layout, Database, ArrowRight, Upload, User, Target, Trash2, Settings, Calendar as CalendarIcon, Cloud, X
 } from 'lucide-react';
 import { STATUS_OPTIONS, PAYMENT_STATUS, parseCSVLine, calculateCompositeScore } from './utils/helpers';
 import { Notification } from './components/ui/Notification';
@@ -381,6 +381,11 @@ export default function App() {
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
+                  <X size={18} />
+                </button>
+              )}
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
               <button onClick={() => setFilterStatus('todos')} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterStatus === 'todos' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-200 text-gray-600'}`}>Todos</button>
