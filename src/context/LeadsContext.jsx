@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { localLeadsService } from '../services/leads.local';
 import { cloudLeadsService } from '../services/leads.cloud';
+import { activityLogger } from '../services/activityLogger';
 
 const LeadsContext = createContext();
 
@@ -49,6 +50,7 @@ export const LeadsProvider = ({ children }) => {
         } else {
             await cloudLeadsService.batchUpload(newLeads);
         }
+        activityLogger.logAction('import', `Importación masiva: ${newLeads.length} leads`, null, 'Sistema');
     }, [mode]);
 
     const addLead = useCallback(async (lead) => {
@@ -58,6 +60,7 @@ export const LeadsProvider = ({ children }) => {
         } else {
             await cloudLeadsService.addLead(lead);
         }
+        activityLogger.logAction('lead_created', `Nuevo lead creado: ${lead.name}`, lead.id, lead.name);
     }, [mode]);
 
     const updateLead = useCallback(async (leadId, updates) => {
@@ -67,9 +70,21 @@ export const LeadsProvider = ({ children }) => {
         } else {
             await cloudLeadsService.updateLead(leadId, updates);
         }
-    }, [mode]);
+
+        // Find lead name for logging
+        const lead = leads.find(l => l.id === leadId);
+        if (lead) {
+            const keys = Object.keys(updates);
+            if (keys.length === 1 && keys[0] === 'status') {
+                activityLogger.logAction('status_change', `Estado cambiado a ${updates.status}`, leadId, lead.name);
+            } else {
+                activityLogger.logAction('lead_updated', `Lead actualizado`, leadId, lead.name);
+            }
+        }
+    }, [mode, leads]);
 
     const deleteLead = useCallback(async (leadId, permanent = false) => {
+        const lead = leads.find(l => l.id === leadId);
         if (mode === 'local') {
             const updated = permanent
                 ? localLeadsService.deleteLead(leadId)
@@ -82,7 +97,10 @@ export const LeadsProvider = ({ children }) => {
                 await cloudLeadsService.softDeleteLead(leadId);
             }
         }
-    }, [mode]);
+        if (lead) {
+            activityLogger.logAction('lead_deleted', permanent ? `Lead eliminado permanentemente` : `Lead movido a papelera`, leadId, lead.name);
+        }
+    }, [mode, leads]);
 
     const restoreLead = useCallback(async (leadId) => {
         if (mode === 'local') {

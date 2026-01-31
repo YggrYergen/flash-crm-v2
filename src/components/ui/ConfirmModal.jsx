@@ -5,7 +5,7 @@ export const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
                 <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
                     <h3 className="font-bold text-lg text-red-700 flex items-center gap-2">

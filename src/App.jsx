@@ -10,7 +10,9 @@ import { LeadForm } from './components/lead/LeadForm';
 import { TrackingDashboard } from './components/tracking/TrackingDashboard';
 import { DataSettings } from './components/settings/DataSettings';
 import { CalendarView } from './components/calendar/CalendarView';
+import { BitacoraView } from './components/bitacora/BitacoraView';
 import { ConfirmModal } from './components/ui/ConfirmModal';
+import { NavMenu } from './components/ui/NavMenu';
 import { useLeads } from './context/LeadsContext';
 
 export default function App() {
@@ -343,31 +345,14 @@ export default function App() {
         message={`¿Estás seguro de eliminar a ${leadToDelete?.name}?`}
       />
 
-      <header className="bg-white px-4 py-3 shadow-sm z-10 flex-none">
+      <header className="bg-white px-4 py-3 shadow-sm z-40 flex-none">
         <div className="flex justify-between items-center mb-2">
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-2">
             Flash CRM <span className="text-xs bg-gray-100 text-gray-500 px-1 rounded">v2.1</span>
             {mode === 'cloud' && <Cloud size={14} className="text-blue-500 animate-pulse" />}
           </h1>
           <div className="flex gap-2">
-            <button
-              className={`p-2 rounded-full ${activeTab === 'tracking' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'}`}
-              onClick={() => handleTabChange('tracking')}
-            >
-              <Target size={18} />
-            </button>
-            <button className={`p-2 rounded-full ${activeTab === 'list' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`} onClick={() => handleTabChange('list')}>
-              <Layout size={18} />
-            </button>
-            <button
-              onClick={() => handleTabChange('calendar')}
-              className={`p-2 rounded-full ${activeTab === 'calendar' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-600'}`}
-            >
-              <CalendarIcon size={18} />
-            </button>
-            <button className={`p-2 rounded-full ${activeTab === 'settings' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600'}`} onClick={() => handleTabChange('settings')}>
-              <Settings size={18} />
-            </button>
+            <NavMenu activeTab={activeTab} onTabChange={handleTabChange} />
           </div>
         </div>
         {activeTab === 'list' && (
@@ -416,7 +401,12 @@ export default function App() {
             leads={leads}
             openDetail={openDetail}
             setActiveTab={handleTabChange}
+            onUpdateLead={handleLeadUpdate}
           />
+        )}
+
+        {activeTab === 'bitacora' && (
+          <BitacoraView />
         )}
 
         {activeTab === 'settings' && (

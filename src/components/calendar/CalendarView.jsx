@@ -3,12 +3,14 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, Plus } from
 import { getDaysInMonth, getDaysInWeek, isSameDay, formatTime, addMonths, addDays } from '../../utils/dateUtils';
 import { EVENT_TYPES } from '../../utils/helpers';
 import { EventModal } from './EventModal';
+import { EventDetailModal } from './EventDetailModal';
 
 export const CalendarView = ({ leads, onUpdateLead, navigateToLead }) => {
     const [view, setView] = useState('month'); // month, week, day
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedEvent, setSelectedEvent] = useState(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [newEventDate, setNewEventDate] = useState(null);
 
     // Flatten all events from all leads
@@ -40,7 +42,12 @@ export const CalendarView = ({ leads, onUpdateLead, navigateToLead }) => {
 
     const handleEventClick = (event) => {
         setSelectedEvent(event);
-        setIsModalOpen(true);
+        setIsDetailModalOpen(true);
+    };
+
+    const handleEditEvent = () => {
+        setIsDetailModalOpen(false);
+        setIsEditModalOpen(true);
     };
 
     const handleSaveEvent = (eventData) => {
@@ -73,6 +80,8 @@ export const CalendarView = ({ leads, onUpdateLead, navigateToLead }) => {
             const newEvents = currentEvents.map(e => e.id === updatedEvent.id ? updatedEvent : e);
             onUpdateLead(lead.id, 'events', newEvents);
         }
+        setIsEditModalOpen(false);
+        setSelectedEvent(null);
     };
 
     const handleDeleteEvent = (eventId) => {
@@ -84,6 +93,9 @@ export const CalendarView = ({ leads, onUpdateLead, navigateToLead }) => {
                 onUpdateLead(lead.id, 'events', newEvents);
             }
         }
+        setIsDetailModalOpen(false);
+        setIsEditModalOpen(false);
+        setSelectedEvent(null);
     };
 
     const renderEventChip = (event, isCompact = false) => {
@@ -143,26 +155,37 @@ export const CalendarView = ({ leads, onUpdateLead, navigateToLead }) => {
                         <span className="text-xs text-gray-400">{currentDate.toLocaleDateString([], { month: 'long', year: 'numeric' })}</span>
                     </div>
                 </h3>
-                <div className="space-y-2 relative">
-                    {/* Simple time slots 8am - 8pm */}
-                    {Array.from({ length: 13 }, (_, i) => i + 8).map(hour => (
-                        <div key={hour} className="flex border-b border-gray-100 min-h-[60px] group">
-                            <div className="w-16 text-right pr-4 text-xs text-gray-400 py-2 -mt-2 group-odd:bg-gray-50/50">
-                                {hour}:00
+                <div className="space-y-0.5 relative">
+                    {/* Simple time slots 8am - 10pm */}
+                    {Array.from({ length: 15 }, (_, i) => i + 8).map(hour => {
+                        const slotEvents = dayEvents.filter(e => new Date(e.start).getHours() === hour);
+                        return (
+                            <div key={hour} className={`flex border-b border-gray-100 min-h-[60px] group ${slotEvents.length > 5 ? 'min-h-[100px]' : ''}`}>
+                                <div className="w-12 text-right pr-2 text-[10px] text-gray-400 py-2 -mt-2 group-odd:bg-gray-50/50 flex-shrink-0">
+                                    {hour}:00
+                                </div>
+                                <div className="flex-1 flex flex-wrap gap-1 p-1">
+                                    {slotEvents.map(ev => {
+                                        const type = EVENT_TYPES.find(t => t.id === ev.type) || EVENT_TYPES[3];
+                                        return (
+                                            <div
+                                                key={ev.id}
+                                                onClick={(e) => { e.stopPropagation(); handleEventClick(ev); }}
+                                                className={`flex-1 min-w-[120px] max-w-[200px] p-2 rounded border-l-4 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-[0.98] ${type.color.replace('text-', 'text-gray-800 ').replace('bg-', 'bg-opacity-20 bg-')}`}
+                                            >
+                                                <div className="font-bold flex justify-between items-center text-[10px]">
+                                                    <span className="truncate">{ev.title}</span>
+                                                    <span className="flex-shrink-0 opacity-60 ml-1">{formatTime(new Date(ev.start))}</span>
+                                                </div>
+                                                <p className="opacity-70 truncate text-[9px] mt-0.5">{ev.leadName}</p>
+                                            </div>
+                                        );
+                                    })}
+                                    {slotEvents.length === 0 && <div className="flex-1" />}
+                                </div>
                             </div>
-                            <div className="flex-1 relative py-1">
-                                {dayEvents.filter(e => new Date(e.start).getHours() === hour).map(ev => (
-                                    <div key={ev.id} onClick={(e) => { e.stopPropagation(); handleEventClick(ev); }} className="absolute left-0 right-0 m-1 p-2 rounded bg-blue-100 border-l-4 border-blue-500 text-xs cursor-pointer hover:shadow-md transition-shadow z-10">
-                                        <p className="font-bold text-blue-800 flex justify-between">
-                                            <span>{ev.title}</span>
-                                            <span>{formatTime(new Date(ev.start))} - {formatTime(new Date(ev.end))}</span>
-                                        </p>
-                                        <p className="text-blue-600 truncate">{ev.leadName}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -266,9 +289,17 @@ export const CalendarView = ({ leads, onUpdateLead, navigateToLead }) => {
                 {view === 'day' && renderDayView()}
             </div>
 
+            <EventDetailModal
+                isOpen={isDetailModalOpen}
+                onClose={() => { setIsDetailModalOpen(false); setSelectedEvent(null); }}
+                event={selectedEvent}
+                onEdit={handleEditEvent}
+                onDelete={handleDeleteEvent}
+            />
+
             <EventModal
-                isOpen={isModalOpen}
-                onClose={() => { setIsModalOpen(false); setSelectedEvent(null); }}
+                isOpen={isEditModalOpen}
+                onClose={() => { setIsEditModalOpen(false); setSelectedEvent(null); }}
                 onSave={handleUpdateEvent}
                 onDelete={handleDeleteEvent}
                 initialEvent={selectedEvent}

@@ -4,19 +4,23 @@ import {
     Truck, Award, ChevronRight
 } from 'lucide-react';
 import { ProgressBar } from '../ui/ProgressBar';
+import { EventModal } from '../calendar/EventModal';
 
-export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
+export const TrackingDashboard = ({ leads, openDetail, setActiveTab, onUpdateLead }) => {
+
+    const [selectedEvent, setSelectedEvent] = React.useState(null);
+    const [isEventModalOpen, setIsEventModalOpen] = React.useState(false);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const stats = useMemo(() => {
-        // Gamification: Contacted Today
+        // Gamification: Calls Today (based on lastCallAttemptAt)
         const contactedToday = leads.filter(l => {
-            if (!l.lastContactedAt) return false;
-            const contactDate = new Date(l.lastContactedAt);
-            contactDate.setHours(0, 0, 0, 0);
-            return contactDate.getTime() === today.getTime();
+            if (!l.lastCallAttemptAt) return false;
+            const callDate = new Date(l.lastCallAttemptAt);
+            callDate.setHours(0, 0, 0, 0);
+            return callDate.getTime() === today.getTime();
         }).length;
 
         // Reminders & Events
@@ -100,6 +104,38 @@ export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
         return <span className="text-gray-500">{formatDate(timestamp)}</span>;
     };
 
+    const handleEventClick = (item, e) => {
+        e.stopPropagation();
+        setSelectedEvent({ ...item, leadId: item.lead.id, leadName: item.lead.name });
+        setIsEventModalOpen(true);
+    };
+
+    const handleUpdateEvent = (updatedEvent) => {
+        const lead = leads.find(l => l.id === updatedEvent.leadId);
+        if (lead) {
+            const currentEvents = lead.events || [];
+            const newEvents = currentEvents.map(e => e.id === updatedEvent.id ? updatedEvent : e);
+            onUpdateLead(lead.id, 'events', newEvents);
+        }
+        setIsEventModalOpen(false);
+    };
+
+    const handleDeleteEvent = (eventId) => {
+        if (selectedEvent) {
+            const lead = leads.find(l => l.id === selectedEvent.leadId);
+            if (lead) {
+                const currentEvents = lead.events || [];
+                const newEvents = currentEvents.filter(e => e.id !== eventId);
+                onUpdateLead(lead.id, 'events', newEvents);
+            }
+        }
+        setIsEventModalOpen(false);
+    };
+
+    const handleStatusUpdate = (lead, status) => {
+        onUpdateLead(lead.id, 'delivery', { ...lead.delivery, status, updatedAt: Date.now() });
+    };
+
     return (
         <div className="bg-gray-50 min-h-full pb-20">
             {/* Gamification Header */}
@@ -140,15 +176,17 @@ export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
                     ) : (
                         <div className="space-y-3">
                             {stats.pendingActions.map((item, idx) => (
-                                <div key={idx} onClick={() => openDetail(item.lead)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-transform">
-                                    <div className="flex-1">
+                                <div key={idx} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-transform">
+                                    <div className="flex-1" onClick={() => openDetail(item.lead)}>
                                         <div className="flex justify-between items-start">
                                             <h4 className="font-bold text-gray-800">{item.lead.name}</h4>
                                             <span className="text-xs ml-2">{getDueLabel(item.dueAt)}</span>
                                         </div>
                                         <p className="text-xs text-gray-500 line-clamp-1 mt-1">{item.note || "Sin nota"}</p>
                                     </div>
-                                    <ChevronRight className="text-gray-300 ml-2" size={16} />
+                                    <button onClick={(e) => handleEventClick(item, e)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full">
+                                        <Calendar size={16} />
+                                    </button>
                                 </div>
                             ))}
                         </div>
@@ -170,17 +208,25 @@ export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
                             {stats.pendingDeliveries.map(item => {
                                 const lead = item.isEvent ? item.lead : item;
                                 return (
-                                    <div key={item.id} onClick={() => openDetail(lead)} className="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-green-500 flex justify-between items-center">
-                                        <div>
+                                    <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-green-500 flex justify-between items-center">
+                                        <div onClick={() => openDetail(lead)} className="flex-1">
                                             <h4 className="font-bold text-gray-800">{lead.name}</h4>
                                             <p className="text-xs text-gray-500 mt-1">
                                                 {item.isEvent ? `📅 ${item.delivery.details}` : (lead.delivery?.details || "Servicio pendiente")}
                                             </p>
                                         </div>
-                                        <div className="text-right">
+                                        <div className="text-right flex flex-col items-end gap-2">
                                             <span className={`text-xs px-2 py-1 rounded-full ${item.isEvent ? 'bg-purple-100 text-purple-700' : (lead.delivery?.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700')}`}>
                                                 {item.isEvent ? 'Agendado' : (lead.delivery?.status === 'in_progress' ? 'En proceso' : 'Pendiente')}
                                             </span>
+                                            {!item.isEvent && (
+                                                <button
+                                                    onClick={() => handleStatusUpdate(lead, 'delivered')}
+                                                    className="text-[10px] text-green-600 font-bold border border-green-200 px-2 py-0.5 rounded italic"
+                                                >
+                                                    Marcar Entregado
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -190,6 +236,14 @@ export const TrackingDashboard = ({ leads, openDetail, setActiveTab }) => {
                 </div>
 
             </div>
+
+            <EventModal
+                isOpen={isEventModalOpen}
+                onClose={() => { setIsEventModalOpen(false); setSelectedEvent(null); }}
+                onSave={handleUpdateEvent}
+                onDelete={handleDeleteEvent}
+                initialEvent={selectedEvent}
+            />
         </div>
     );
 };

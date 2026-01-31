@@ -10,6 +10,7 @@ import { PostCallModal } from './PostCallModal';
 import { ReminderModal } from '../tracking/ReminderModal';
 import { EventModal } from '../calendar/EventModal';
 import { QUICK_NOTES, INTEREST_OPTIONS, EVENT_TYPES } from '../../utils/helpers';
+import { activityLogger } from '../../services/activityLogger';
 import { Truck, Bell, Calendar as CalendarIcon } from 'lucide-react';
 
 export const LeadDetail = ({
@@ -53,6 +54,18 @@ export const LeadDetail = ({
     const handleCall = (e) => {
         e.preventDefault();
         window.location.href = `tel:${lead.phone}`;
+
+        // Log activity
+        activityLogger.logAction('call', `Intento de llamada`, lead.id, lead.name);
+
+        // Update lastCallAttemptAt for the counter logic (1 per day per lead)
+        const today = new Date().setHours(0, 0, 0, 0);
+        const lastAttempt = lead.lastCallAttemptAt ? new Date(lead.lastCallAttemptAt).setHours(0, 0, 0, 0) : 0;
+
+        if (today !== lastAttempt) {
+            onUpdate('lastCallAttemptAt', Date.now());
+        }
+
         setTimeout(() => {
             setShowPostCall(true);
         }, 1000);
