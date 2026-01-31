@@ -314,10 +314,65 @@ export default function App() {
   const filteredLeads = useMemo(() => {
     return leads.filter(l => {
       if (l.deletedAt) return false;
-      const matchesSearch = (l.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.company || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+      const term = searchTerm.toLowerCase();
+      if (!term) return filterStatus === 'todos' || l.status === filterStatus;
+
+      // SEARCH LOGIC
+      let matchType = null;
+      let isMatch = false;
+
+      // 1. Name/Company
+      if ((l.name || '').toLowerCase().includes(term) || (l.company || '').toLowerCase().includes(term)) {
+        isMatch = true;
+        matchType = 'name';
+      }
+
+      // 2. Phone (Clean check)
+      if (!isMatch) {
+        const cleanPhone = (l.phone || '').replace(/[^0-9]/g, '');
+        if (cleanPhone.includes(term) || (l.phone || '').includes(term)) {
+          isMatch = true;
+          matchType = 'phone';
+        }
+      }
+
+      // 3. Notes
+      if (!isMatch && l.notes && Array.isArray(l.notes)) {
+        const matchedNote = l.notes.find(n => n.content.toLowerCase().includes(term));
+        if (matchedNote) {
+          isMatch = true;
+          matchType = 'note';
+        }
+      }
+
+      // 4. Events
+      if (!isMatch && l.events && Array.isArray(l.events)) {
+        const matchedEvent = l.events.find(e =>
+          (e.title || '').toLowerCase().includes(term) ||
+          (e.notes || '').toLowerCase().includes(term)
+        );
+        if (matchedEvent) {
+          isMatch = true;
+          matchType = 'event';
+        }
+      }
+
+      // 5. Email/Address/Web
+      if (!isMatch) {
+        if ((l.email || '').toLowerCase().includes(term) || (l.full_address || '').toLowerCase().includes(term)) {
+          isMatch = true;
+          matchType = 'info';
+        }
+      }
+
+      // Append match info to the lead object for UI display without mutating original
+      if (isMatch) {
+        l.searchMatch = matchType;
+      }
+
       const matchesFilter = filterStatus === 'todos' || l.status === filterStatus;
-      return matchesSearch && matchesFilter;
+      return isMatch && matchesFilter;
     });
   }, [leads, searchTerm, filterStatus]);
 

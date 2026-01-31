@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, Users, Target, Award, Database, BarChart2, Clock, MoreVertical, Trash2, Check, X } from 'lucide-react';
+import { TrendingUp, Users, Target, Award, Database, BarChart2, Clock, MoreVertical, Trash2, Check, X, Phone, FileText, Calendar, StickyNote } from 'lucide-react';
 import { StatusBadge } from '../ui/StatusBadge';
 
 export const LeadList = ({
@@ -102,6 +102,14 @@ export const LeadList = ({
                             <div>
                                 <h3 className="font-bold text-gray-800 text-lg leading-tight truncate max-w-[200px]">{lead.name}</h3>
                                 {lead.company && <p className="text-gray-500 text-sm font-medium truncate max-w-[200px]">{lead.company}</p>}
+                                {lead.searchMatch && lead.searchMatch !== 'name' && (
+                                    <div className="flex items-center gap-1 text-[10px] text-gray-400 mt-1 italic">
+                                        {lead.searchMatch === 'phone' && <><Phone size={10} /> Coincide por Teléfono</>}
+                                        {lead.searchMatch === 'note' && <><StickyNote size={10} /> Coincide en Notas</>}
+                                        {lead.searchMatch === 'event' && <><Calendar size={10} /> Coincide en Evento</>}
+                                        {lead.searchMatch === 'info' && <><FileText size={10} /> Coincide en Info</>}
+                                    </div>
+                                )}
                             </div>
                             <StatusBadge statusId={lead.status} options={statusOptions} />
                         </div>
