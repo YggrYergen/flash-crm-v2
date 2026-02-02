@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import {
-  Plus, Search, Layout, Database, ArrowRight, Upload, User, Target, Trash2, Settings, Calendar as CalendarIcon, Cloud, X
+  Plus, Search, Layout, Database, ArrowRight, Upload, User, Target, Trash2, Settings, Calendar as CalendarIcon, Cloud, X, ArrowUpDown, Filter, Check
 } from 'lucide-react';
 import { STATUS_OPTIONS, PAYMENT_STATUS, parseCSVLine, calculateCompositeScore } from './utils/helpers';
 import { Notification } from './components/ui/Notification';
@@ -34,6 +34,8 @@ export default function App() {
   const [selectedLead, setSelectedLead] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('todos');
+  const [sortOption, setSortOption] = useState('score_desc');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -398,8 +400,18 @@ export default function App() {
 
       const matchesFilter = filterStatus === 'todos' || l.status === filterStatus;
       return isMatch && matchesFilter;
+    }).sort((a, b) => {
+      switch (sortOption) {
+        case 'score_asc':
+          return (a.fitnessScore || 0) - (b.fitnessScore || 0);
+        case 'score_desc':
+          return (b.fitnessScore || 0) - (a.fitnessScore || 0);
+        case 'date_new':
+        default:
+          return (b.createdAt || 0) - (a.createdAt || 0);
+      }
     });
-  }, [leads, searchTerm, filterStatus]);
+  }, [leads, searchTerm, filterStatus, sortOption]);
 
   const stats = useMemo(() => {
     const total = leads.length;
@@ -452,11 +464,51 @@ export default function App() {
                 </button>
               )}
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-              <button onClick={() => setFilterStatus('todos')} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterStatus === 'todos' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-200 text-gray-600'}`}>Todos</button>
-              {STATUS_OPTIONS.map(opt => (
-                <button key={opt.id} onClick={() => setFilterStatus(opt.id)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterStatus === opt.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-200 text-gray-600'}`}>{opt.label}</button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                <button onClick={() => setFilterStatus('todos')} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterStatus === 'todos' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-200 text-gray-600'}`}>Todos</button>
+                {STATUS_OPTIONS.map(opt => (
+                  <button key={opt.id} onClick={() => setFilterStatus(opt.id)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap border ${filterStatus === opt.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-200 text-gray-600'}`}>{opt.label}</button>
+                ))}
+              </div>
+
+              {/* Sort Button */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                  className={`p-1.5 rounded-lg border transition-colors ${sortOption.includes('score') ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-gray-200 text-gray-500'}`}
+                >
+                  <ArrowUpDown size={18} />
+                </button>
+
+                {isSortMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setIsSortMenuOpen(false)} />
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1 text-sm z-20 animate-in fade-in zoom-in-95">
+                      <div className="px-3 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-50 mb-1">Ordenar por</div>
+                      <button
+                        onClick={() => { setSortOption('score_desc'); setIsSortMenuOpen(false); }}
+                        className={`w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between ${sortOption === 'score_desc' ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
+                      >
+                        Mayor Puntaje {sortOption === 'score_desc' && <Check size={14} />}
+                      </button>
+                      <button
+                        onClick={() => { setSortOption('score_asc'); setIsSortMenuOpen(false); }}
+                        className={`w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between ${sortOption === 'score_asc' ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
+                      >
+                        Menor Puntaje {sortOption === 'score_asc' && <Check size={14} />}
+                      </button>
+                      <div className="my-1 border-t border-gray-50" />
+                      <button
+                        onClick={() => { setSortOption('date_new'); setIsSortMenuOpen(false); }}
+                        className={`w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between ${sortOption === 'date_new' ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
+                      >
+                        Más Recientes {sortOption === 'date_new' && <Check size={14} />}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}
