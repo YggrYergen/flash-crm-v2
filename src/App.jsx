@@ -96,10 +96,10 @@ export default function App() {
   const showToast = (msg) => setNotification(msg);
 
   // --- ACTIONS ---
-  const handleLeadUpdate = async (leadId, fieldOrUpdates, value) => {
+  const handleLeadUpdate = async (leadId, fieldOrUpdates, value, forcedLog = null) => {
     const updatesObj = (typeof fieldOrUpdates === 'string') ? { [fieldOrUpdates]: value } : fieldOrUpdates;
     try {
-      await updateLead(leadId, updatesObj);
+      await updateLead(leadId, updatesObj, forcedLog);
       if (selectedLead && selectedLead.id === leadId) {
         setSelectedLead({ ...selectedLead, ...updatesObj, updatedAt: Date.now() });
       }
@@ -108,9 +108,9 @@ export default function App() {
     }
   };
 
-  const handleQuickUpdate = (fieldOrObj, value) => {
+  const handleQuickUpdate = (fieldOrObj, value, forcedLog = null) => {
     if (!selectedLead) return;
-    handleLeadUpdate(selectedLead.id, fieldOrObj, value);
+    handleLeadUpdate(selectedLead.id, fieldOrObj, value, forcedLog);
     if (typeof fieldOrObj === 'string' && fieldOrObj === 'status') showToast("Estado actualizado");
   };
 
@@ -312,7 +312,11 @@ export default function App() {
     const newNote = { content: noteContent, timestamp: Date.now(), id: Math.random().toString(36).substr(2, 9) };
     const updatedNotes = [newNote, ...(selectedLead.notes || [])];
     try {
-      await updateLead(selectedLead.id, { notes: updatedNotes });
+      await updateLead(selectedLead.id, { notes: updatedNotes }, {
+        type: 'note_added',
+        description: noteContent,
+        metadata: { noteId: newNote.id }
+      });
       setSelectedLead({ ...selectedLead, notes: updatedNotes, updatedAt: Date.now() });
     } catch (e) {
       showToast("Error al guardar nota");

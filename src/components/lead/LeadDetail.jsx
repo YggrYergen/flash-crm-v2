@@ -86,19 +86,37 @@ export const LeadDetail = ({
                 }, 300);
                 break;
             case 'contacted':
-                onUpdate('status', 'contactado');
+                onUpdate('status', 'contactado', null, {
+                    type: 'call',
+                    description: 'Llamada exitosa: Cliente contactado'
+                });
                 onUpdate('lastContactedAt', Date.now());
                 break;
             case 'meeting':
-                onUpdate('status', 'reunion');
+                onUpdate('status', 'reunion', null, {
+                    type: 'call',
+                    description: 'Llamada exitosa: Reunión agendada'
+                });
                 break;
         }
     };
 
     const handleReminderSave = (reminder) => {
         const currentReminders = lead.reminders || [];
-        onUpdate('reminders', [...currentReminders, { ...reminder, id: Date.now(), completed: false }]);
-        onAddNote(`⏰ Recordatorio: ${reminder.note} (${new Date(reminder.dueAt).toLocaleString()})`);
+        const reminderText = `⏰ Recordatorio: ${reminder.note} (${new Date(reminder.dueAt).toLocaleString()})`;
+
+        // Add note first to get it updated in state
+        const newNote = { content: reminderText, timestamp: Date.now(), id: Math.random().toString(36).substr(2, 9) };
+        const currentNotes = lead.notes || [];
+        const newNoteList = [newNote, ...currentNotes];
+
+        onUpdate({
+            reminders: [...currentReminders, { ...reminder, id: Date.now(), completed: false }],
+            notes: newNoteList
+        }, null, {
+            type: 'note_added',
+            description: reminderText
+        });
     };
 
     const handleEventSave = (event) => {
@@ -110,8 +128,14 @@ export const LeadDetail = ({
         const currentNotes = lead.notes || [];
         const newNoteList = [newNote, ...currentNotes];
 
-        // Batch update to avoid race condition
-        onUpdate({ events: newEventList, notes: newNoteList });
+        // Batch update with explicit log
+        onUpdate({
+            events: newEventList,
+            notes: newNoteList
+        }, null, {
+            type: 'note_added',
+            description: noteContent
+        });
     };
 
     const handleDeliveryUpdate = (status, details = '') => {
