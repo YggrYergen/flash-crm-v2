@@ -461,7 +461,10 @@ export default function App() {
         )}
 
         {activeTab === 'bitacora' && (
-          <BitacoraView />
+          <BitacoraView onNavigateToLead={(leadId) => {
+            const lead = leads.find(l => l.id === leadId);
+            if (lead) openDetail(lead);
+          }} />
         )}
 
         {activeTab === 'settings' && (

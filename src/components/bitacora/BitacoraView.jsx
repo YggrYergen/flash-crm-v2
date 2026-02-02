@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
     Clock, Calendar, Phone, UserPlus, Trash2, Edit3,
     RefreshCcw, BookOpen, ChevronDown, ChevronUp, User,
@@ -6,10 +6,11 @@ import {
 } from 'lucide-react';
 import { activityLogger } from '../../services/activityLogger';
 
-export const BitacoraView = () => {
+export const BitacoraView = ({ onNavigateToLead }) => {
     const [viewMode, setViewMode] = useState('diario'); // diario, historico
     const [expandedGroups, setExpandedGroups] = useState(new Set());
     const [isAllDetailed, setIsAllDetailed] = useState(false);
+    const lastTapRef = useRef(0);
 
     const logs = useMemo(() => {
         if (viewMode === 'diario') {
@@ -50,6 +51,22 @@ export const BitacoraView = () => {
         if (newExpanded.has(groupId)) newExpanded.delete(groupId);
         else newExpanded.add(groupId);
         setExpandedGroups(newExpanded);
+    };
+
+    const handleCardClick = (groupId, entityId) => {
+        const now = Date.now();
+        const DOUBLE_TAP_DELAY = 300;
+
+        if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+            // Double tap detected
+            if (onNavigateToLead && entityId) {
+                onNavigateToLead(entityId);
+            }
+        } else {
+            // Single tap - toggle expand
+            toggleExpand(groupId);
+        }
+        lastTapRef.current = now;
     };
 
     const getTypeIcon = (type) => {
@@ -125,35 +142,49 @@ export const BitacoraView = () => {
                             >
                                 {/* Header of the Card */}
                                 <div
-                                    className={`flex items-center justify-between p-4 ${isMultiItem ? 'bg-gray-50/50 border-b border-gray-100' : ''} cursor-pointer`}
-                                    onClick={() => toggleExpand(group.id)}
+                                    className={`flex items-start justify-between p-4 ${isMultiItem ? 'bg-gray-50/50 border-b border-gray-100' : ''} cursor-pointer select-none active:bg-gray-50 transition-colors`}
+                                    onClick={() => handleCardClick(group.id, group.entityId)}
                                 >
-                                    <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className="flex gap-3 overflow-hidden w-full">
                                         {!isMultiItem && (
-                                            <div className="p-2 bg-gray-50 rounded-xl flex-shrink-0">
+                                            <div className="p-2 bg-gray-50 rounded-xl flex-shrink-0 mt-0.5">
                                                 {getTypeIcon(group.items[0].type)}
                                             </div>
                                         )}
                                         {isMultiItem && (
-                                            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl flex-shrink-0">
+                                            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl flex-shrink-0 mt-0.5">
                                                 <User size={14} />
                                             </div>
                                         )}
 
-                                        <div className="overflow-hidden">
-                                            <h4 className="font-bold text-gray-800 truncate text-sm">
-                                                {group.entityName || 'Sistema'}
-                                            </h4>
-                                            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                                                {isMultiItem
-                                                    ? `${group.items.length} acciones recientes • ${formatTime(group.timestamp)}`
-                                                    : `${formatTime(group.items[0].timestamp)}`
-                                                }
-                                            </p>
+                                        <div className="overflow-hidden flex-1">
+                                            <div className="flex justify-between items-center">
+                                                <h4 className="font-bold text-gray-800 truncate text-sm">
+                                                    {group.entityName || 'Sistema'}
+                                                </h4>
+                                                <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap ml-2">
+                                                    {isMultiItem ? formatTime(group.timestamp) : formatTime(group.items[0].timestamp)}
+                                                </span>
+                                            </div>
+
+                                            {/* Show comment immediately if single item */}
+                                            {!isMultiItem && (
+                                                <p className="text-sm text-gray-600 font-medium mt-1 leading-snug break-words">
+                                                    {group.items[0].description}
+                                                </p>
+                                            )}
+
+                                            {/* Show summary if multi item */}
+                                            {isMultiItem && (
+                                                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mt-0.5">
+                                                    {group.items.length} acciones recientes
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
+
                                     {isMultiItem && (
-                                        <div className="text-gray-300">
+                                        <div className="text-gray-300 ml-2 mt-1">
                                             {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                         </div>
                                     )}
