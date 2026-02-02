@@ -52,14 +52,14 @@ export default function App() {
 
   const fileInputRef = useRef(null);
   const mainRef = useRef(null);
-  const scrollPositionRef = useRef(0);
+  const scrollPositionRef = useRef({});
 
   // Navigation History
   const [navHistory, setNavHistory] = useState(['list']);
 
   const handleTabChange = (tab) => {
-    if (activeTab === 'list' && mainRef.current) {
-      scrollPositionRef.current = mainRef.current.scrollTop;
+    if (mainRef.current) {
+      scrollPositionRef.current[activeTab] = mainRef.current.scrollTop;
     }
 
     // Don't push duplicates if clicking same tab content
@@ -81,12 +81,13 @@ export default function App() {
     }
   };
 
-  // Restore scroll when entering 'list' tab
+  // Restore scroll when entering any tab
   useLayoutEffect(() => {
-    if (activeTab === 'list' && mainRef.current) {
+    if (mainRef.current) {
+      const savedPosition = scrollPositionRef.current[activeTab] || 0;
       const timeoutId = setTimeout(() => {
         if (mainRef.current) {
-          mainRef.current.scrollTop = scrollPositionRef.current;
+          mainRef.current.scrollTop = savedPosition;
         }
       }, 0);
       return () => clearTimeout(timeoutId);
