@@ -2,13 +2,13 @@ import React, { useState, useMemo } from 'react';
 import {
     Clock, Calendar, Phone, UserPlus, Trash2, Edit3,
     RefreshCcw, BookOpen, ChevronDown, ChevronUp, User,
-    FileText, Tag, CheckCircle2
+    FileText, Tag, CheckCircle2, MessageSquare, Zap
 } from 'lucide-react';
 import { activityLogger } from '../../services/activityLogger';
 
 export const BitacoraView = () => {
     const [viewMode, setViewMode] = useState('diario'); // diario, historico
-    const [expandedLogs, setExpandedLogs] = useState(new Set());
+    const [expandedGroups, setExpandedGroups] = useState(new Set());
     const [isAllDetailed, setIsAllDetailed] = useState(false);
 
     const logs = useMemo(() => {
@@ -18,11 +18,38 @@ export const BitacoraView = () => {
         return activityLogger.getLogs();
     }, [viewMode]);
 
-    const toggleExpand = (id) => {
-        const newExpanded = new Set(expandedLogs);
-        if (newExpanded.has(id)) newExpanded.delete(id);
-        else newExpanded.add(id);
-        setExpandedLogs(newExpanded);
+    const groupedLogs = useMemo(() => {
+        const groups = [];
+        let currentGroup = null;
+
+        logs.forEach((log) => {
+            if (currentGroup && log.entityId && log.entityId === currentGroup.entityId) {
+                currentGroup.items.push(log);
+            } else {
+                if (currentGroup) {
+                    groups.push(currentGroup);
+                }
+                currentGroup = {
+                    id: `group_${log.id}`,
+                    entityId: log.entityId,
+                    entityName: log.entityName,
+                    timestamp: log.timestamp,
+                    items: [log],
+                    type: log.entityId ? 'client_activity' : 'system'
+                };
+            }
+        });
+        if (currentGroup) {
+            groups.push(currentGroup);
+        }
+        return groups;
+    }, [logs]);
+
+    const toggleExpand = (groupId) => {
+        const newExpanded = new Set(expandedGroups);
+        if (newExpanded.has(groupId)) newExpanded.delete(groupId);
+        else newExpanded.add(groupId);
+        setExpandedGroups(newExpanded);
     };
 
     const getTypeIcon = (type) => {
@@ -32,7 +59,8 @@ export const BitacoraView = () => {
             case 'lead_deleted': return <Trash2 size={14} className="text-red-600" />;
             case 'status_change': return <RefreshCcw size={14} className="text-purple-600" />;
             case 'lead_updated': return <Edit3 size={14} className="text-amber-600" />;
-            case 'import': return <CheckCircle2 size={14} className="text-indigo-600" />;
+            case 'note_added': return <MessageSquare size={14} className="text-pink-600" />;
+            case 'import': return <Zap size={14} className="text-yellow-600" />;
             default: return <FileText size={14} className="text-gray-600" />;
         }
     };
@@ -57,7 +85,7 @@ export const BitacoraView = () => {
                         onClick={() => setIsAllDetailed(!isAllDetailed)}
                         className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${isAllDetailed ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200'}`}
                     >
-                        {isAllDetailed ? 'Vista Resumida' : 'Vista Detallada'}
+                        {isAllDetailed ? 'Expandir Todo' : 'Vista Compacta'}
                     </button>
                 </div>
 
@@ -77,8 +105,8 @@ export const BitacoraView = () => {
                 </div>
             </div>
 
-            <div className="px-4 space-y-3">
-                {logs.length === 0 ? (
+            <div className="px-4 space-y-4">
+                {groupedLogs.length === 0 ? (
                     <div className="py-20 text-center">
                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <BookOpen size={24} className="text-gray-300" />
@@ -86,76 +114,100 @@ export const BitacoraView = () => {
                         <p className="text-gray-400 font-medium">No hay registros de actividad aún.</p>
                     </div>
                 ) : (
-                    logs.map((log) => {
-                        const isExpanded = isAllDetailed || expandedLogs.has(log.id);
+                    groupedLogs.map((group) => {
+                        const isExpanded = isAllDetailed || expandedGroups.has(group.id);
+                        const isMultiItem = group.items.length > 1;
 
                         return (
                             <div
-                                key={log.id}
-                                onClick={() => !isAllDetailed && toggleExpand(log.id)}
-                                className={`bg-white rounded-2xl shadow-sm border border-gray-100 transition-all active:scale-[0.99] group ${isExpanded ? 'p-4' : 'px-4 py-3'}`}
+                                key={group.id}
+                                className={`bg-white rounded-2xl shadow-sm border border-gray-100 transition-all overflow-hidden ${isMultiItem ? 'p-0' : 'p-0'}`}
                             >
-                                <div className="flex items-center justify-between">
+                                {/* Header of the Card */}
+                                <div
+                                    className={`flex items-center justify-between p-4 ${isMultiItem ? 'bg-gray-50/50 border-b border-gray-100' : ''} cursor-pointer`}
+                                    onClick={() => toggleExpand(group.id)}
+                                >
                                     <div className="flex items-center gap-3 overflow-hidden">
-                                        <div className={`p-2 rounded-xl flex-shrink-0 ${isExpanded ? 'bg-gray-50' : ''}`}>
-                                            {getTypeIcon(log.type)}
-                                        </div>
+                                        {!isMultiItem && (
+                                            <div className="p-2 bg-gray-50 rounded-xl flex-shrink-0">
+                                                {getTypeIcon(group.items[0].type)}
+                                            </div>
+                                        )}
+                                        {isMultiItem && (
+                                            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl flex-shrink-0">
+                                                <User size={14} />
+                                            </div>
+                                        )}
+
                                         <div className="overflow-hidden">
-                                            <h4 className={`font-bold text-gray-800 truncate ${isExpanded ? 'text-base' : 'text-sm'}`}>
-                                                {log.entityName || 'Sistema'}
+                                            <h4 className="font-bold text-gray-800 truncate text-sm">
+                                                {group.entityName || 'Sistema'}
                                             </h4>
-                                            {!isExpanded && (
-                                                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                                                    {log.description} • {formatTime(log.timestamp)}
-                                                </p>
-                                            )}
+                                            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                                                {isMultiItem
+                                                    ? `${group.items.length} acciones recientes • ${formatTime(group.timestamp)}`
+                                                    : `${formatTime(group.items[0].timestamp)}`
+                                                }
+                                            </p>
                                         </div>
                                     </div>
-                                    {!isAllDetailed && (
-                                        <div className="text-gray-300 group-hover:text-gray-400">
+                                    {isMultiItem && (
+                                        <div className="text-gray-300">
                                             {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                         </div>
                                     )}
                                 </div>
 
-                                {isExpanded && (
-                                    <div className="mt-4 pt-4 border-t border-gray-50 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1">
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                                                    <Tag size={10} /> Acción
-                                                </p>
-                                                <p className="text-sm text-gray-700 font-medium">{log.description}</p>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                                                    <Clock size={10} /> Hora
-                                                </p>
-                                                <p className="text-sm text-gray-700 font-medium">{formatTime(log.timestamp)}</p>
-                                            </div>
-                                        </div>
+                                {/* Body of the Card */}
+                                <div className={`p-4 pt-2 ${!isExpanded && isMultiItem ? 'hidden' : 'block'}`}>
+                                    <div className="relative pl-2  space-y-6">
+                                        {/* Vertical Timeline Line */}
+                                        {isMultiItem && (
+                                            <div className="absolute left-[19px] top-2 bottom-4 w-[1px] bg-gray-100"></div>
+                                        )}
 
-                                        <div className="space-y-1">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                                                <Calendar size={10} /> Fecha Completa
-                                            </p>
-                                            <p className="text-sm text-gray-700 font-medium">
-                                                {new Date(log.timestamp).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                                            </p>
-                                        </div>
+                                        {group.items.map((log, idx) => (
+                                            <div key={log.id} className="relative z-10 group">
+                                                <div className="flex gap-3">
+                                                    {isMultiItem && (
+                                                        <div className="mt-1 relative flex-shrink-0">
+                                                            <div className="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm z-20 relative">
+                                                                {getTypeIcon(log.type)}
+                                                            </div>
+                                                        </div>
+                                                    )}
 
-                                        {log.entityId && (
-                                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <User size={12} className="text-gray-400" />
-                                                        <span className="text-[10px] text-gray-500 font-mono">ID: {log.entityId}</span>
+                                                    <div className={`flex-1 ${!isMultiItem ? '' : 'pt-1'}`}>
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            {!isMultiItem && (
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1 mb-1">
+                                                                    {getTypeIcon(log.type)} {formatTime(log.timestamp)}
+                                                                </span>
+                                                            )}
+                                                            {isMultiItem && (
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                                    {formatTime(log.timestamp)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* The Content / Comment */}
+                                                        <div className="text-sm text-gray-600 leading-relaxed font-medium bg-gray-50 p-2.5 rounded-lg border border-gray-100/50">
+                                                            {log.description}
+                                                        </div>
+
+                                                        {(isAllDetailed || expandedGroups.has(group.id)) && log.metadata && Object.keys(log.metadata).length > 0 && (
+                                                            <div className="mt-2 text-[10px] text-gray-400 font-mono pl-1">
+                                                                {JSON.stringify(log.metadata)}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
-                                        )}
+                                        ))}
                                     </div>
-                                )}
+                                </div>
                             </div>
                         );
                     })
@@ -164,3 +216,4 @@ export const BitacoraView = () => {
         </div>
     );
 };
+
