@@ -54,11 +54,31 @@ export default function App() {
   const mainRef = useRef(null);
   const scrollPositionRef = useRef(0);
 
+  // Navigation History
+  const [navHistory, setNavHistory] = useState(['list']);
+
   const handleTabChange = (tab) => {
     if (activeTab === 'list' && mainRef.current) {
       scrollPositionRef.current = mainRef.current.scrollTop;
     }
+
+    // Don't push duplicates if clicking same tab content
+    if (tab !== activeTab) {
+      setNavHistory(prev => [...prev, tab]);
+    }
     setActiveTab(tab);
+  };
+
+  const handleBack = () => {
+    if (navHistory.length > 1) {
+      const newHistory = [...navHistory];
+      newHistory.pop(); // Remove current
+      const prevTab = newHistory[newHistory.length - 1];
+      setNavHistory(newHistory);
+      setActiveTab(prevTab);
+    } else {
+      setActiveTab('list');
+    }
   };
 
   // Restore scroll when entering 'list' tab
@@ -487,6 +507,7 @@ export default function App() {
           <LeadDetail
             lead={selectedLead}
             setActiveTab={handleTabChange}
+            onBack={handleBack}
             statusOptions={STATUS_OPTIONS}
             paymentStatusOptions={PAYMENT_STATUS}
             onUpdate={handleQuickUpdate}

@@ -93,7 +93,7 @@ export const BitacoraView = ({ onNavigateToLead }) => {
     return (
         <div className="bg-gray-50 min-h-full pb-20">
             {/* Header section */}
-            <div className="bg-white p-6 rounded-b-3xl shadow-sm border-b border-gray-100 mb-4 sticky top-0 z-10">
+            <div className="bg-white p-6 rounded-b-3xl shadow-sm border-b border-gray-100 mb-4 sticky top-0 z-30">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                         <BookOpen className="text-amber-500" /> Bitácora
@@ -224,13 +224,53 @@ export const BitacoraView = ({ onNavigateToLead }) => {
                                                         </div>
 
                                                         {/* The Content / Comment */}
-                                                        <div className="text-sm text-gray-600 leading-relaxed font-medium bg-gray-50 p-2.5 rounded-lg border border-gray-100/50">
-                                                            {log.description}
-                                                        </div>
+                                                        {(isAllDetailed || expandedGroups.has(group.id)) && (
+                                                            <div className="mt-4 pt-4 border-t border-gray-50 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                                <div className="space-y-2">
+                                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                                                                        <MessageSquare size={10} /> Comentario / Detalle
+                                                                    </p>
+                                                                    <div className="text-sm text-gray-800 font-medium bg-gray-50 p-3 rounded-xl border border-gray-100 leading-relaxed">
+                                                                        {log.description}
+                                                                    </div>
+                                                                </div>
 
-                                                        {(isAllDetailed || expandedGroups.has(group.id)) && log.metadata && Object.keys(log.metadata).length > 0 && (
-                                                            <div className="mt-2 text-[10px] text-gray-400 font-mono pl-1">
-                                                                {JSON.stringify(log.metadata)}
+                                                                <div className="grid grid-cols-2 gap-4">
+                                                                    <div className="space-y-1">
+                                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                                                                            <Clock size={10} /> Hora
+                                                                        </p>
+                                                                        <p className="text-sm text-gray-700 font-medium">{formatTime(log.timestamp)}</p>
+                                                                    </div>
+                                                                    <div className="space-y-1">
+                                                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                                                                            <Calendar size={10} /> Fecha
+                                                                        </p>
+                                                                        <p className="text-sm text-gray-700 font-medium">
+                                                                            {new Date(log.timestamp).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                {log.entityId && (
+                                                                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <User size={12} className="text-gray-400" />
+                                                                                <span className="text-[10px] text-gray-500 font-mono">ID: {log.entityId}</span>
+                                                                                <span className="text-[10px] text-gray-300"> | </span>
+                                                                                <span className="text-[10px] text-gray-400 uppercase">{log.type}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Show extra metadata if any */}
+                                                                {log.metadata && Object.keys(log.metadata).length > 0 && (
+                                                                    <div className="text-[10px] text-gray-400 font-mono">
+                                                                        {JSON.stringify(log.metadata)}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>

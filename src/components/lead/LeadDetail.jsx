@@ -16,6 +16,7 @@ import { Truck, Bell, Calendar as CalendarIcon } from 'lucide-react';
 export const LeadDetail = ({
     lead,
     setActiveTab,
+    onBack,
     statusOptions,
     paymentStatusOptions,
     onUpdate,
@@ -151,7 +152,7 @@ export const LeadDetail = ({
             />
 
             <div className="sticky top-0 bg-white z-10 border-b border-gray-100 p-4 flex justify-between items-center shadow-sm">
-                <button onClick={() => setActiveTab('list')} className="p-2 -ml-2 text-gray-600">
+                <button onClick={() => onBack ? onBack() : setActiveTab('list')} className="p-2 -ml-2 text-gray-600">
                     <ChevronRight className="rotate-180" />
                 </button>
                 <div className="flex-1 truncate px-2 text-center">
